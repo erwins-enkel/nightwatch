@@ -77,7 +77,10 @@ benannter, wiederverwendbarer Ausnahmekalender gebündelt werden.
 **Regel**:
 Die Erkennungs-Logik innerhalb eines Monitors: Match-Kriterien + OK-/Fehler-Muster (das **Wie
 erkenne ich's**). Der veränder- und lernbare Teil — „Regel überarbeiten" schärft die Muster nach,
-ohne den Monitor neu zu bauen. Genau eine Regel pro Monitor. Herkunft einer Regel → Ticket #9.
+ohne den Monitor neu zu bauen. Genau eine Regel pro Monitor. **Sprachunabhängig**: dieselbe Software
+meldet je nach Konfig „Backup completed" / „Sicherung erfolgreich" / „Sauvegarde terminée" — Muster
+dürfen mehrsprachig sein, und der **Klassifikator** deckt ab, was starre Muster nicht treffen (keine
+eigene Sprach-Erkennung als v1-Kernkonzept nötig). Herkunft einer Regel → Ticket #9.
 
 **Regel-Vorlage**:
 Eine mitgelieferte, kuratierte Regel für die Benachrichtigungen eines bekannten Herstellers/Produkts
