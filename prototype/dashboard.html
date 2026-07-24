@@ -1,0 +1,796 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nightwatch — Prototyp Dashboard & Regel-Anlage (#8)</title>
+</head>
+<body>
+<!--
+  WEGWERF-PROTOTYP — Wayfinder-Ticket #8 (Nightwatch).
+  Drei radikal verschiedene Varianten von Dashboard + Regel-Anlage,
+  umschaltbar via ?variant=A|B|C und schwebender Leiste unten (auch ←/→-Tasten).
+  Alles Fake-Daten, nichts wird gespeichert.
+-->
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .mono { font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
+  button { font: inherit; cursor: pointer; }
+  input, select, textarea { font: inherit; }
+
+  /* ---------- Prototyp-Chrome (nicht Teil des Designs) ---------- */
+  .proto-banner {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 900;
+    background: repeating-linear-gradient(45deg, #1c1c1c, #1c1c1c 12px, #2b2b2b 12px, #2b2b2b 24px);
+    color: #f5d90a; font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+    padding: 4px 12px; text-align: center;
+  }
+  .proto-banner a { color: #f5d90a; }
+  .proto-bar {
+    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); z-index: 900;
+    display: flex; align-items: center; gap: 4px;
+    background: #111; color: #fff; border-radius: 999px; padding: 6px 10px;
+    box-shadow: 0 6px 24px rgba(0,0,0,.35); border: 1px solid #444;
+  }
+  .proto-bar button {
+    background: none; border: none; color: #fff; font-size: 16px; line-height: 1;
+    padding: 4px 8px; border-radius: 999px;
+  }
+  .proto-bar button:hover { background: #333; }
+  .proto-bar .lbl { font-size: 12.5px; padding: 0 8px; min-width: 210px; text-align: center; }
+  .proto-bar .lbl b { letter-spacing: .05em; }
+  #app { padding-top: 24px; min-height: 100vh; }
+
+  /* ---------- Status (Ampel) — Farbe nie allein: immer Form + Text ---------- */
+  .st { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+  .st .dot { width: 10px; height: 10px; display: inline-block; flex: none; }
+  .st-gesund .dot   { background: #0ca30c; border-radius: 50%; }
+  .st-gestoert .dot { background: #d03b3b; border-radius: 2px; transform: rotate(45deg); }
+  .st-pausiert .dot { background: #8a8f98; border-radius: 2px; }
+  .st-gesund   { color: #0a7d0a; }
+  .st-gestoert { color: #b32e2e; }
+  .st-pausiert { color: #6b7079; }
+  .dark .st-gesund   { color: #4fd44f; }
+  .dark .st-gestoert { color: #ff7a70; }
+  .dark .st-pausiert { color: #9aa2af; }
+
+  .tip { position: relative; }
+  .tip:hover::after {
+    content: attr(data-tip); position: absolute; bottom: calc(100% + 6px); left: 50%;
+    transform: translateX(-50%); background: #16181c; color: #f2f4f8; font-size: 11.5px;
+    padding: 5px 8px; border-radius: 6px; white-space: pre; z-index: 500;
+    box-shadow: 0 4px 14px rgba(0,0,0,.3); pointer-events: none; font-weight: 400;
+  }
+
+  .badge-frage {
+    display: inline-block; font-size: 10.5px; font-weight: 700; letter-spacing: .04em;
+    background: #fab219; color: #4a3402; border-radius: 4px; padding: 2px 6px; vertical-align: middle;
+  }
+
+  /* ================= VARIANTE A — Kundenboard ================= */
+  .vA { background: #f2f4f6; color: #1b2430; min-height: 100vh; padding-bottom: 90px; }
+  .vA header { background: #fff; border-bottom: 1px solid #dde2e8; padding: 14px 28px; display: flex; align-items: baseline; gap: 18px; }
+  .vA header h1 { font-size: 17px; margin: 0; letter-spacing: .01em; }
+  .vA header h1 span { color: #0e6e6e; }
+  .vA header .sub { color: #66707c; font-size: 12.5px; }
+  .vA header .spacer { flex: 1; }
+  .vA .btn-primary { background: #0e6e6e; color: #fff; border: none; border-radius: 8px; padding: 8px 14px; font-weight: 600; font-size: 13.5px; }
+  .vA .btn-primary:hover { background: #0a5757; }
+  .vA main { max-width: 1180px; margin: 0 auto; padding: 20px 28px; }
+  .vA h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .09em; color: #66707c; margin: 22px 0 10px; }
+  .vA .alarmstrip { display: flex; flex-direction: column; gap: 8px; }
+  .vA .alarmchip {
+    display: flex; align-items: center; gap: 14px; background: #fff; border: 1px solid #e5b3b0;
+    border-left: 4px solid #d03b3b; border-radius: 8px; padding: 10px 14px; cursor: pointer;
+  }
+  .vA .alarmchip:hover { background: #fdf7f6; }
+  .vA .alarmchip .grund { font-weight: 700; font-size: 13px; color: #b32e2e; min-width: 150px; }
+  .vA .alarmchip .was { font-size: 13.5px; }
+  .vA .alarmchip .was b { font-weight: 600; }
+  .vA .alarmchip .seit { margin-left: auto; color: #66707c; font-size: 12px; }
+  .vA .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(255px, 1fr)); gap: 14px; }
+  .vA .card {
+    background: #fff; border: 1px solid #dde2e8; border-radius: 10px; padding: 14px 16px; cursor: pointer;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .vA .card:hover { border-color: #0e6e6e; box-shadow: 0 2px 10px rgba(14,110,110,.08); }
+  .vA .card .kname { font-weight: 650; font-size: 14.5px; display: flex; align-items: center; gap: 8px; }
+  .vA .card .counts { display: flex; gap: 12px; flex-wrap: wrap; }
+  .vA .card .meta { color: #66707c; font-size: 11.5px; border-top: 1px dashed #e3e7ec; padding-top: 8px; display: flex; gap: 10px; }
+  .vA .triage-list { display: flex; flex-direction: column; gap: 8px; }
+  .vA .triage-item { background: #fff; border: 1px solid #ecd9a8; border-left: 4px solid #fab219; border-radius: 8px; padding: 10px 14px; display: flex; gap: 14px; align-items: center; font-size: 13px; }
+  .vA .triage-item .grund { font-weight: 700; color: #8a6408; min-width: 205px; font-size: 12.5px; }
+  .vA .triage-item .mail { color: #333c48; }
+  .vA .triage-item .mail .mono { font-size: 12px; color: #66707c; }
+  .vA .triage-item .act { margin-left: auto; }
+  .vA .triage-item .act button { background: none; border: 1px solid #c5ccd4; border-radius: 6px; padding: 5px 10px; font-size: 12.5px; }
+  .vA .triage-item .act button:hover { border-color: #0e6e6e; color: #0e6e6e; }
+
+  .vA .drawer-scrim { position: fixed; inset: 0; background: rgba(20,28,38,.45); z-index: 800; }
+  .vA .drawer {
+    position: fixed; top: 0; right: 0; bottom: 0; width: min(480px, 94vw); background: #fff; z-index: 810;
+    box-shadow: -8px 0 30px rgba(0,0,0,.2); padding: 20px 24px 90px; overflow-y: auto;
+  }
+  .vA .drawer .close { position: absolute; top: 14px; right: 16px; background: none; border: none; font-size: 20px; color: #66707c; }
+  .vA .drawer .back { background: none; border: none; color: #0e6e6e; font-size: 12.5px; padding: 0; margin-bottom: 10px; font-weight: 600; }
+  .vA .drawer h3 { margin: 4px 0 2px; font-size: 17px; }
+  .vA .drawer .sub { color: #66707c; font-size: 12.5px; margin-bottom: 14px; }
+  .vA .mlist { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+  .vA .mrow { border: 1px solid #dde2e8; border-radius: 8px; padding: 10px 12px; cursor: pointer; display: flex; align-items: center; gap: 10px; }
+  .vA .mrow:hover { border-color: #0e6e6e; }
+  .vA .mrow .mname { font-weight: 600; font-size: 13.5px; }
+  .vA .mrow .mart { font-size: 11px; color: #66707c; border: 1px solid #dde2e8; border-radius: 4px; padding: 1px 6px; }
+  .vA .mrow .st { margin-left: auto; }
+  .vA .detail dl { display: grid; grid-template-columns: 130px 1fr; gap: 6px 12px; font-size: 13px; margin: 14px 0; }
+  .vA .detail dt { color: #66707c; }
+  .vA .detail dd { margin: 0; }
+  .vA .aktionen { border: 1px solid #dde2e8; border-radius: 8px; padding: 10px 12px; font-size: 13px; display: flex; flex-direction: column; gap: 6px; }
+  .vA .aktionen .ok { color: #0a7d0a; }
+  .vA .mailbox { background: #f6f8fa; border: 1px solid #dde2e8; border-radius: 8px; padding: 10px 12px; font-size: 12.5px; margin-top: 12px; }
+  .vA .mailbox .betreff { font-weight: 600; }
+  .vA .rueckverweis { display: inline-block; margin-top: 12px; background: #eef6f6; border: 1px solid #bcd8d8; color: #0a5757; border-radius: 6px; padding: 6px 10px; font-size: 12.5px; font-weight: 600; text-decoration: none; }
+
+  /* Wizard-Modal A */
+  .vA .modal-scrim { position: fixed; inset: 0; background: rgba(20,28,38,.5); z-index: 850; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .vA .modal { background: #fff; border-radius: 12px; width: min(560px, 96vw); max-height: 88vh; overflow-y: auto; padding: 22px 26px; position: relative; }
+  .vA .modal .close { position: absolute; top: 12px; right: 14px; background: none; border: none; font-size: 20px; color: #66707c; }
+  .vA .steps { display: flex; gap: 6px; margin: 10px 0 18px; }
+  .vA .steps .s { flex: 1; height: 4px; border-radius: 2px; background: #e3e7ec; }
+  .vA .steps .s.on { background: #0e6e6e; }
+  .vA .modal h3 { margin: 0; font-size: 16px; }
+  .vA .modal .stepname { color: #66707c; font-size: 12.5px; margin-top: 2px; }
+  .vA .field { margin-bottom: 13px; }
+  .vA .field label { display: block; font-size: 12.5px; font-weight: 600; margin-bottom: 4px; }
+  .vA .field .hint { font-size: 11.5px; color: #66707c; font-weight: 400; margin-top: 3px; }
+  .vA .field input[type=text], .vA .field select, .vA .field textarea {
+    width: 100%; border: 1px solid #c5ccd4; border-radius: 7px; padding: 8px 10px; font-size: 13.5px; background: #fff;
+  }
+  .vA .artgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .vA .artopt { border: 1px solid #c5ccd4; border-radius: 8px; padding: 10px 12px; cursor: pointer; }
+  .vA .artopt:hover { border-color: #0e6e6e; }
+  .vA .artopt.sel { border-color: #0e6e6e; background: #eef6f6; }
+  .vA .artopt .an { font-weight: 650; font-size: 13.5px; }
+  .vA .artopt .ad { font-size: 11.5px; color: #66707c; margin-top: 2px; }
+  .vA .modal footer { display: flex; justify-content: space-between; margin-top: 18px; }
+  .vA .btn-ghost { background: none; border: 1px solid #c5ccd4; border-radius: 8px; padding: 8px 14px; font-size: 13.5px; }
+  .vA .radio-row { display: flex; gap: 14px; font-size: 13px; align-items: center; flex-wrap: wrap; }
+  .vA .toast { position: fixed; bottom: 78px; left: 50%; transform: translateX(-50%); background: #0e6e6e; color: #fff; padding: 10px 18px; border-radius: 8px; z-index: 950; font-size: 13.5px; box-shadow: 0 6px 24px rgba(0,0,0,.3); }
+
+  /* ================= VARIANTE B — Leitstand (dunkel) ================= */
+  .vB { background: #0d1420; color: #e6edf6; min-height: 100vh; padding-bottom: 90px; }
+  .vB header { display: flex; align-items: center; gap: 26px; padding: 14px 26px; border-bottom: 1px solid #223048; }
+  .vB header h1 { font-size: 15px; margin: 0; letter-spacing: .14em; text-transform: uppercase; color: #4cc3e8; }
+  .vB .counters { display: flex; gap: 22px; margin-left: auto; }
+  .vB .counter { text-align: right; }
+  .vB .counter .n { font-size: 22px; font-weight: 700; line-height: 1; }
+  .vB .counter .t { font-size: 10.5px; text-transform: uppercase; letter-spacing: .1em; color: #8fa0b8; }
+  .vB .counter.crit .n { color: #ff7a70; }
+  .vB .counter.warn .n { color: #fab219; }
+  .vB .counter.ok .n { color: #4fd44f; }
+  .vB .counter.pause .n { color: #9aa2af; }
+  .vB .btn-primary { background: #4cc3e8; color: #06222e; border: none; border-radius: 6px; padding: 8px 14px; font-weight: 700; font-size: 13px; }
+  .vB .btn-primary:hover { background: #7ad3ef; }
+  .vB .split { display: grid; grid-template-columns: 360px 1fr; gap: 0; border-bottom: 1px solid #223048; min-height: 300px; }
+  .vB .alarmcol { border-right: 1px solid #223048; }
+  .vB .colhead { font-size: 10.5px; text-transform: uppercase; letter-spacing: .12em; color: #8fa0b8; padding: 12px 18px 8px; }
+  .vB .alarmrow { padding: 10px 18px; cursor: pointer; border-left: 3px solid transparent; }
+  .vB .alarmrow:hover { background: #121c2c; }
+  .vB .alarmrow.sel { background: #16233a; border-left-color: #ff7a70; }
+  .vB .alarmrow .l1 { display: flex; gap: 8px; align-items: baseline; }
+  .vB .alarmrow .grund { color: #ff7a70; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .vB .alarmrow .dauer { margin-left: auto; color: #8fa0b8; font-size: 11.5px; }
+  .vB .alarmrow .l2 { font-size: 13px; margin-top: 3px; }
+  .vB .alarmrow .l2 b { color: #fff; }
+  .vB .alarmrow .l2 span { color: #8fa0b8; }
+  .vB .detailpane { padding: 14px 22px; }
+  .vB .detailpane h3 { margin: 0 0 2px; font-size: 16px; }
+  .vB .detailpane .sub { color: #8fa0b8; font-size: 12.5px; }
+  .vB .kv { display: grid; grid-template-columns: 150px 1fr; gap: 5px 14px; font-size: 13px; margin: 14px 0; }
+  .vB .kv dt { color: #8fa0b8; }
+  .vB .kv dd { margin: 0; }
+  .vB .panelbox { background: #121c2c; border: 1px solid #223048; border-radius: 8px; padding: 10px 14px; font-size: 12.5px; margin-top: 10px; }
+  .vB .panelbox .h { font-size: 10.5px; text-transform: uppercase; letter-spacing: .1em; color: #8fa0b8; margin-bottom: 6px; }
+  .vB .panelbox .ok { color: #4fd44f; }
+  .vB .actions { display: flex; gap: 10px; margin-top: 14px; align-items: center; flex-wrap: wrap; }
+  .vB .btn-ghost { background: none; border: 1px solid #2e415f; color: #cdd9e8; border-radius: 6px; padding: 7px 12px; font-size: 12.5px; }
+  .vB .btn-ghost:hover { border-color: #4cc3e8; color: #4cc3e8; }
+  .vB table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .vB th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .1em; color: #8fa0b8; padding: 10px 12px; border-bottom: 1px solid #223048; font-weight: 600; }
+  .vB td { padding: 9px 12px; border-bottom: 1px solid #18243a; }
+  .vB tr.mtr:hover td { background: #121c2c; }
+  .vB td .artchip { font-size: 10.5px; border: 1px solid #2e415f; color: #8fa0b8; border-radius: 4px; padding: 1px 6px; }
+  .vB .tablewrap { overflow-x: auto; padding: 0 14px 20px; }
+  .vB .triagechip { color: #fab219; font-weight: 700; }
+  .vB .uhr { margin-left: 20px; color: #8fa0b8; font-size: 12.5px; }
+
+  /* Inline-Formular B */
+  .vB .formpanel { border-bottom: 1px solid #223048; background: #101a2a; padding: 16px 26px 20px; }
+  .vB .formpanel h3 { margin: 0 0 12px; font-size: 14px; letter-spacing: .06em; text-transform: uppercase; color: #4cc3e8; }
+  .vB .fgrid { display: grid; grid-template-columns: repeat(3, minmax(210px, 1fr)); gap: 14px 18px; }
+  .vB .fld label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: #8fa0b8; margin-bottom: 4px; }
+  .vB .fld input, .vB .fld select, .vB .fld textarea {
+    width: 100%; background: #0d1420; border: 1px solid #2e415f; color: #e6edf6; border-radius: 6px; padding: 7px 9px; font-size: 13px;
+  }
+  .vB .fld .hint { font-size: 11px; color: #667891; margin-top: 3px; }
+  .vB .fsection { grid-column: 1 / -1; border-top: 1px dashed #223048; padding-top: 12px; font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: #8fa0b8; }
+  .vB .formfoot { display: flex; gap: 10px; margin-top: 16px; align-items: center; }
+
+  /* ================= VARIANTE C — Zeitachse ================= */
+  .vC { background: #ffffff; color: #14161a; min-height: 100vh; padding-bottom: 90px; }
+  .vC header { padding: 18px 32px 10px; display: flex; align-items: baseline; gap: 16px; border-bottom: 2px solid #14161a; }
+  .vC header h1 { font-size: 19px; margin: 0; }
+  .vC header h1 em { font-style: normal; color: #4a4fbf; }
+  .vC header .sub { color: #5c6270; font-size: 12.5px; }
+  .vC header .spacer { flex: 1; }
+  .vC .legende { display: flex; gap: 16px; font-size: 11.5px; color: #5c6270; align-items: center; }
+  .vC main { max-width: 1240px; margin: 0 auto; padding: 8px 32px; }
+  .vC .layout { display: grid; grid-template-columns: 1fr 330px; gap: 28px; align-items: start; }
+  .vC .kgroup { margin-top: 18px; }
+  .vC .kgroup .khead {
+    display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 6px 0;
+    border-bottom: 1px solid #d9dce3; user-select: none;
+  }
+  .vC .kgroup .khead .caret { font-size: 11px; color: #5c6270; width: 12px; }
+  .vC .kgroup .khead .kname { font-weight: 700; font-size: 14px; }
+  .vC .kgroup .khead .ksum { margin-left: auto; }
+  .vC .mline { display: grid; grid-template-columns: 250px 1fr 120px 110px; gap: 14px; align-items: center; padding: 8px 0 8px 22px; border-bottom: 1px solid #eceef2; }
+  .vC .mline:hover { background: #f7f8fb; }
+  .vC .mline.gestoert { background: #fdf6f5; }
+  .vC .mline.gestoert:hover { background: #fbefed; }
+  .vC .mline .mname { font-size: 13px; font-weight: 600; cursor: pointer; }
+  .vC .mline .mname:hover { color: #4a4fbf; }
+  .vC .mline .mart { font-size: 10.5px; color: #5c6270; }
+  .vC .dots { display: flex; gap: 0; align-items: center; height: 26px; }
+  .vC .day { flex: 1; display: flex; gap: 3px; align-items: center; justify-content: center; border-left: 1px solid #eceef2; height: 100%; }
+  .vC .day:first-child { border-left: none; }
+  .vC .d { width: 9px; height: 9px; border-radius: 50%; display: inline-block; cursor: default; }
+  .vC .d-ok { background: #0ca30c; }
+  .vC .d-fehler { background: #d03b3b; border-radius: 2px; transform: rotate(45deg); }
+  .vC .d-unklar { background: #fff; border: 2px solid #d03b3b; width: 8px; height: 8px; }
+  .vC .d-erwartet { background: #fff; border: 1.5px dashed #a0a6b1; }
+  .vC .d-fehlt { background: #fff; border: 2px solid #d03b3b; border-radius: 0; transform: rotate(45deg); width: 8px; height: 8px; }
+  .vC .d-pause { background: #d3d6dc; }
+  .vC .next { font-size: 11.5px; color: #5c6270; text-align: right; }
+  .vC .next.due { color: #b32e2e; font-weight: 700; }
+  .vC .mline .st { justify-self: end; }
+  .vC .expand { grid-column: 1 / -1; background: #fbfbfd; border: 1px solid #d9dce3; border-radius: 8px; padding: 14px 18px; margin: 4px 0 10px; }
+  .vC .expand h4 { margin: 0 0 8px; font-size: 13.5px; }
+  .vC .expand .kv { display: grid; grid-template-columns: 150px 1fr; gap: 4px 12px; font-size: 12.5px; }
+  .vC .expand .kv dt { color: #5c6270; }
+  .vC .expand .kv dd { margin: 0; }
+  .vC .expand .rueck { display: inline-block; margin-top: 10px; color: #4a4fbf; font-weight: 600; font-size: 12.5px; text-decoration: none; border-bottom: 1px dashed #4a4fbf; }
+  .vC .daylabels { display: grid; grid-template-columns: 250px 1fr 120px 110px; gap: 14px; padding-left: 22px; margin-top: 14px; }
+  .vC .daylabels .lbls { display: flex; }
+  .vC .daylabels .lbls span { flex: 1; text-align: center; font-size: 10.5px; color: #5c6270; text-transform: uppercase; letter-spacing: .05em; }
+  .vC .daylabels .cap { font-size: 10.5px; color: #5c6270; text-transform: uppercase; letter-spacing: .05em; }
+  .vC .daylabels .cap.r { text-align: right; }
+
+  /* Regel aus Mail — Seitenspalte C */
+  .vC aside { border: 2px solid #14161a; border-radius: 10px; padding: 16px 18px; margin-top: 18px; position: sticky; top: 34px; }
+  .vC aside h2 { margin: 0; font-size: 14px; }
+  .vC aside .sub { font-size: 11.5px; color: #5c6270; margin: 3px 0 12px; }
+  .vC .maillist { display: flex; flex-direction: column; gap: 6px; }
+  .vC .mailrow { border: 1px solid #d9dce3; border-radius: 7px; padding: 8px 10px; cursor: pointer; font-size: 12px; }
+  .vC .mailrow:hover { border-color: #4a4fbf; }
+  .vC .mailrow.sel { border-color: #4a4fbf; background: #f4f4fb; }
+  .vC .mailrow .b { font-weight: 600; font-size: 12.5px; }
+  .vC .mailrow .m { color: #5c6270; font-size: 11px; margin-top: 2px; }
+  .vC .mailrow .tri { color: #8a6408; font-weight: 700; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; }
+  .vC .vorschlag { margin-top: 14px; border-top: 1px solid #d9dce3; padding-top: 12px; }
+  .vC .vorschlag .fld { margin-bottom: 10px; }
+  .vC .vorschlag label { display: block; font-size: 11px; font-weight: 700; margin-bottom: 3px; }
+  .vC .vorschlag input, .vC .vorschlag select { width: 100%; border: 1px solid #c6cad2; border-radius: 6px; padding: 6px 8px; font-size: 12.5px; }
+  .vC .vs-badge { display: inline-block; font-size: 9.5px; font-weight: 700; background: #e9e9f8; color: #383c99; border-radius: 3px; padding: 1px 5px; margin-left: 6px; letter-spacing: .04em; }
+  .vC .btn-primary { background: #4a4fbf; color: #fff; border: none; border-radius: 7px; padding: 8px 12px; font-weight: 600; font-size: 13px; width: 100%; }
+  .vC .btn-primary:hover { background: #3b3f9c; }
+  .vC .leer { color: #5c6270; font-size: 12px; font-style: italic; }
+
+  @media (max-width: 980px) {
+    .vC .layout { grid-template-columns: 1fr; }
+    .vC aside { position: static; }
+    .vB .split { grid-template-columns: 1fr; }
+    .vB .alarmcol { border-right: none; border-bottom: 1px solid #223048; }
+    .vB .fgrid { grid-template-columns: 1fr; }
+    .vC .mline, .vC .daylabels { grid-template-columns: 160px 1fr 90px 100px; }
+  }
+</style>
+
+<div class="proto-banner">Wegwerf-Prototyp · Wayfinder-Ticket #8 · Fake-Daten · nichts wird gespeichert</div>
+<div id="app"></div>
+<div class="proto-bar">
+  <button id="pb-prev" aria-label="Vorherige Variante">←</button>
+  <div class="lbl"><b id="pb-key"></b> — <span id="pb-name"></span></div>
+  <button id="pb-next" aria-label="Nächste Variante">→</button>
+</div>
+
+<script>
+/* =============== Fake-Daten (heute: Fr, 24.07.2026, 08:05) =============== */
+const HEUTE = 'Fr 24.07.2026';
+const KUNDEN = [
+  { id: 'stadtwerke', name: 'Stadtwerke Nettetal', merkmale: ['Kundennummer „KD-4711“ im Betreff', 'Absender *@sw-nettetal.de'], autotask: 'Autotask #29014', archiviert: false },
+  { id: 'brenner', name: 'Autohaus Brenner GmbH', merkmale: ['Plus-Adresse noc+brenner@…', 'Absender no-reply@synology.com'], autotask: 'Autotask #29188', archiviert: false },
+  { id: 'hoffmann', name: 'Steuerkanzlei Hoffmann & Partner', merkmale: ['Plus-Adresse noc+hoffmann@…'], autotask: null, archiviert: false },
+  { id: 'weber', name: 'Praxis Dr. Weber', merkmale: ['Absender *@praxis-weber.de', 'Absender no-reply@synology.com'], autotask: 'Autotask #30021', archiviert: false },
+  { id: 'intern', name: 'Systemhaus (eigene Infrastruktur)', merkmale: ['Plus-Adresse noc+intern@…'], autotask: 'Autotask #10001', archiviert: false },
+  { id: 'kluge', name: 'Malermeister Kluge', merkmale: ['Absender *@kluge-maler.de'], autotask: null, archiviert: true },
+];
+const ARTEN = {
+  heartbeat: { n: 'Heartbeat', d: 'Erwartet Mails in Regelmäßigkeit — schlecht, wenn sie ausbleiben oder Fehler melden.' },
+  ereignis: { n: 'Ereignis', d: 'Mails kommen nur im Störungsfall — schlecht, sobald eine kommt.' },
+  paar: { n: 'Paar/Zustand', d: '„Auf“-Mail öffnet, „Zu“-Mail schließt — schlecht, wenn zu lange offen.' },
+  schwellwert: { n: 'Schwellwert/Rate', d: 'Schlecht bei mehr als N passenden Mails in Zeitfenster T.' },
+  volumen: { n: 'Volumen/Abweichung', d: 'Schlecht bei starker Abweichung vom erlernten Normalwert.' },
+};
+/* dots: 7 Tage Sa 18. … Fr 24.; Werte: ok fehler unklar erwartet fehlt pause leer */
+const MONITORE = [
+  { id: 'm1', kunde: 'stadtwerke', name: 'Veeam Backup Tagesreport', art: 'heartbeat', zustand: 'gestoert', pausiert: false, grund: 'überfällig',
+    erwartung: 'Kalenderplan · Mo–Fr bis 06:00 · Karenz 45 min', letzteMail: 'Do 23.07. 05:41 (OK)', naechste: 'heute 06:00 — überfällig seit 06:45',
+    dots: ['leer','leer','ok','ok','ok','ok','fehlt'] },
+  { id: 'm2', kunde: 'stadtwerke', name: 'USV Meldungsrate (APC)', art: 'schwellwert', zustand: 'gesund', pausiert: false, grund: null,
+    erwartung: 'Schwellwert · max. 5 Mails / 30 min', letzteMail: 'Mi 22.07. 14:02 (OK)', naechste: '—',
+    dots: ['leer','leer','leer','leer','ok','leer','leer'] },
+  { id: 'm3', kunde: 'stadtwerke', name: 'M365 Journal-Volumen', art: 'volumen', zustand: 'gesund', pausiert: false, grund: null,
+    erwartung: 'Volumen · Normal Ø 112 Mails/Tag (erlernt)', letzteMail: 'heute 07:58', naechste: 'laufend',
+    dots: ['ok','ok','ok','ok','ok','ok','ok'] },
+  { id: 'm4', kunde: 'brenner', name: 'Synology HyperBackup', art: 'heartbeat', zustand: 'gesund', pausiert: false, grund: null,
+    erwartung: 'Intervall · spätestens alle 24 h · Karenz 2 h', letzteMail: 'heute 03:41 (OK)', naechste: 'Sa 25.07. ~03:41',
+    dots: ['ok','ok','ok','ok','ok','ok','ok'] },
+  { id: 'm5', kunde: 'brenner', name: 'Backup Exec Wochenreport', art: 'heartbeat', zustand: 'gestoert', pausiert: false, grund: 'unklar (nicht klassifizierbar)',
+    erwartung: 'Kalenderplan · Fr bis 07:00 · Karenz 60 min', letzteMail: 'heute 06:52 (Unklar)', naechste: 'Fr 31.07. 07:00',
+    dots: ['ok','leer','leer','leer','leer','leer','unklar'] },
+  { id: 'm6', kunde: 'brenner', name: 'Router Telekom (Leitung)', art: 'paar', zustand: 'gestoert', pausiert: false, grund: 'Paar zu lange offen',
+    erwartung: 'Paar · „Leitung ab“ öffnet, „Leitung wieder da“ schließt · max. 30 min offen', letzteMail: 'heute 04:22 („Leitung ab“)', naechste: 'wartet auf „Zu“-Mail',
+    dots: ['leer','ok','leer','leer','leer','leer','fehler'] },
+  { id: 'm7', kunde: 'hoffmann', name: 'DATEV Datensicherung', art: 'heartbeat', zustand: 'gesund', pausiert: false, grund: null,
+    erwartung: 'Kalenderplan · täglich bis 05:30 · Karenz 30 min', letzteMail: 'heute 05:12 (OK)', naechste: 'Sa 25.07. 05:30',
+    dots: ['ok','ok','ok','ok','ok','ok','ok'] },
+  { id: 'm8', kunde: 'hoffmann', name: 'Sophos Firewall Status', art: 'heartbeat', zustand: 'gesund', pausiert: false, grund: null,
+    erwartung: 'Intervall · spätestens alle 12 h · Karenz 1 h', letzteMail: 'heute 06:30 (OK)', naechste: 'heute 18:30',
+    dots: ['ok','ok','ok','ok','ok','ok','ok'] },
+  { id: 'm9', kunde: 'weber', name: 'NAS Praxisserver (Wartungsfenster)', art: 'heartbeat', zustand: 'gesund', pausiert: true, grund: null,
+    erwartung: 'Kalenderplan · täglich bis 07:00 · Karenz 45 min · pausiert bis Di 28.07. (Wartung)', letzteMail: 'Mo 20.07. 06:48 (OK)', naechste: 'pausiert bis 28.07.',
+    dots: ['ok','ok','ok','pause','pause','pause','pause'] },
+  { id: 'm10', kunde: 'weber', name: 'AV-Signaturen Wochenreport', art: 'heartbeat', zustand: 'gesund', pausiert: false, grund: null,
+    erwartung: 'Kalenderplan · Mo bis 09:00 · Karenz 2 h', letzteMail: 'Mo 20.07. 08:15 (OK)', naechste: 'Mo 27.07. 09:00',
+    dots: ['leer','leer','ok','leer','leer','leer','leer'] },
+  { id: 'm11', kunde: 'intern', name: 'Sophos Firmware-Hinweise', art: 'ereignis', zustand: 'gestoert', pausiert: false, grund: 'Ereignis eingetroffen',
+    erwartung: 'Ereignis · jede passende Mail ist eine Störung', letzteMail: 'heute 05:58 („Firmware 21.2 available“)', naechste: '—',
+    dots: ['leer','leer','leer','leer','leer','leer','fehler'] },
+  { id: 'm12', kunde: 'intern', name: 'Proxmox Backup (intern)', art: 'heartbeat', zustand: 'gesund', pausiert: false, grund: null,
+    erwartung: 'Kalenderplan · täglich bis 04:00 · Karenz 30 min', letzteMail: 'heute 03:12 (OK)', naechste: 'Sa 25.07. 04:00',
+    dots: ['ok','ok','ok','ok','ok','ok','ok'] },
+];
+const ALARME = [
+  { id: 'a1', monitor: 'm1', seit: 'heute 06:45', dauer: '1 h 20 min', grund: 'überfällig',
+    mail: null,
+    verlauf: ['06:00 Soll-Zeitpunkt (Kalenderplan Mo–Fr 06:00)', '06:45 Karenz (45 min) abgelaufen → Gestört', '06:45 Alarm ausgelöst'],
+    aktionen: ['✓ Autotask-Ticket T20260724.0042 bei Stadtwerke Nettetal erstellt (06:45)', '✓ Webhook „NOC-Board“ 200 OK (06:45)'] },
+  { id: 'a2', monitor: 'm6', seit: 'heute 04:52', dauer: '3 h 13 min', grund: 'Paar zu lange offen',
+    mail: { betreff: 'WAN-Verbindung getrennt — Standort Hauptstraße', absender: 'router@brenner-gmbh.de', zeit: 'heute 04:22',
+      auszug: 'Die WAN-Verbindung (Telekom VDSL) wurde um 04:21:57 getrennt. Fallback auf LTE aktiv.' },
+    verlauf: ['04:22 „Auf“-Mail eingetroffen („Leitung ab“)', '04:52 max. Offenzeit (30 min) überschritten → Gestört', '04:52 Alarm ausgelöst'],
+    aktionen: ['✓ Autotask-Ticket T20260724.0031 bei Autohaus Brenner erstellt (04:52)'] },
+  { id: 'a3', monitor: 'm5', seit: 'heute 06:52', dauer: '1 h 13 min', grund: 'unklar (nicht klassifizierbar)',
+    mail: { betreff: 'Backup Exec: Job ‚Woche-Vollsicherung‘ completed with exceptions', absender: 'backupexec@brenner-gmbh.de', zeit: 'heute 06:52',
+      auszug: 'The job completed successfully, but 3 files were skipped. See job log for details.' },
+    verlauf: ['06:52 Mail zugeordnet (Kunde: Autohaus Brenner → Monitor: Backup Exec Wochenreport)', '06:52 Klassifikation: kein OK-/Fehler-Muster trifft → Unklar', '06:52 Alarm ausgelöst (Empfehlung: Regel überarbeiten)'],
+    aktionen: ['✓ Autotask-Ticket T20260724.0044 bei Autohaus Brenner erstellt (06:52) — mit Rückverweis „Regel überarbeiten“'] },
+  { id: 'a4', monitor: 'm11', seit: 'heute 05:58', dauer: '2 h 07 min', grund: 'Ereignis eingetroffen',
+    mail: { betreff: 'Sophos Firmware 21.2 GA available for XGS 2100', absender: 'noreply@sophos.com', zeit: 'heute 05:58',
+      auszug: 'A new firmware version 21.2 GA is available for your registered device XGS 2100 (S/N X2100-4711).' },
+    verlauf: ['05:58 Mail zugeordnet (Kunde: Systemhaus → Monitor: Sophos Firmware-Hinweise)', '05:58 Ereignis-Muster trifft → Gestört', '05:58 Alarm ausgelöst'],
+    aktionen: ['— kein Autotask (interner Kunde ohne Ticket-Regel) · Webhook „NOC-Board“ 200 OK (05:58)'] },
+];
+const TRIAGE = [
+  { grund: 'Kein Kunde erkannt', mail: { betreff: 'Camera offline notification (Cam 03)', absender: 'monitoring@hikvision-cloud.com', zeit: 'heute 02:14' } },
+  { grund: 'Mehrdeutig (2 Kandidaten)', kandidaten: 'Autohaus Brenner · Praxis Dr. Weber', mail: { betreff: 'DSM: Speicherpool-Zustand', absender: 'no-reply@synology.com', zeit: 'heute 03:05' } },
+  { grund: 'Kunde erkannt, kein Monitor passt', kunde: 'Steuerkanzlei Hoffmann & Partner', mail: { betreff: 'HP LaserJet M479: Tonerstand niedrig', absender: 'drucker@kanzlei-hoffmann.de', zeit: 'gestern 16:44' } },
+];
+
+/* =============== Helfer =============== */
+const $ = (sel) => document.querySelector(sel);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const monitorVon = (id) => MONITORE.find((m) => m.id === id);
+const kundeVon = (id) => KUNDEN.find((k) => k.id === id);
+const monitoreVonKunde = (kid) => MONITORE.filter((m) => m.kunde === kid);
+function stBadge(m) {
+  if (m.pausiert) return '<span class="st st-pausiert"><span class="dot"></span>Pausiert</span>';
+  if (m.zustand === 'gestoert') return '<span class="st st-gestoert"><span class="dot"></span>Gestört</span>';
+  return '<span class="st st-gesund"><span class="dot"></span>Gesund</span>';
+}
+function kundeAmpel(kid) {
+  const ms = monitoreVonKunde(kid);
+  if (ms.some((m) => m.zustand === 'gestoert' && !m.pausiert)) return '<span class="st st-gestoert"><span class="dot"></span>Gestört</span>';
+  if (ms.some((m) => m.pausiert)) return '<span class="st st-pausiert"><span class="dot"></span>teilw. pausiert</span>';
+  return '<span class="st st-gesund"><span class="dot"></span>Gesund</span>';
+}
+const DAYS = ['Sa 18.', 'So 19.', 'Mo 20.', 'Di 21.', 'Mi 22.', 'Do 23.', 'Fr 24.'];
+const DOTTIP = { ok: 'Mail eingetroffen · OK', fehler: 'Mail eingetroffen · Fehler/Ereignis', unklar: 'Mail eingetroffen · Unklar', erwartet: 'Mail erwartet', fehlt: 'Erwartete Mail fehlt (überfällig)', pause: 'pausiert' };
+function dotStrip(m) {
+  return '<div class="dots">' + m.dots.map((d, i) => {
+    if (d === 'leer') return '<span class="day"></span>';
+    return `<span class="day"><span class="d d-${d} tip" data-tip="${DAYS[i]} — ${DOTTIP[d]}"></span></span>`;
+  }).join('') + '</div>';
+}
+function toast(msg) {
+  const t = document.createElement('div');
+  t.className = 'toast'; t.style.cssText = 'position:fixed;bottom:78px;left:50%;transform:translateX(-50%);background:#111;color:#fff;padding:10px 18px;border-radius:8px;z-index:950;font-size:13.5px;box-shadow:0 6px 24px rgba(0,0,0,.3)';
+  t.textContent = msg; document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2600);
+}
+
+/* Regel-Anlage: Feld-Definitionen, in allen Varianten gleich (nur der Flow unterscheidet sich) */
+const ART_PARAMS = {
+  heartbeat: `
+    <div class="fld field"><label>Erwartung</label>
+      <div class="radio-row"><label><input type="radio" name="erw" checked> Kalenderplan</label><label><input type="radio" name="erw"> Intervall</label></div>
+    </div>
+    <div class="fld field"><label>Kalenderplan (Soll-Zeitpunkte)</label><input type="text" value="Mo–Fr bis 06:00"><div class="hint">cron-artig; Wochenenden über den Plan selbst abgedeckt</div></div>
+    <div class="fld field"><label>Karenz</label><input type="text" value="45 min"><div class="hint">Puffer nach Soll, bevor „überfällig“ ausgelöst wird</div></div>
+    <div class="fld field"><label>Ausnahmetage</label><input type="text" placeholder="z. B. Kalender „Feiertage NRW (manuell)“"><div class="hint">manuell gepflegt; Auto-Feiertagskalender kommt in einer Folgeversion</div></div>`,
+  ereignis: `
+    <div class="fld field"><label>Erholung</label>
+      <div class="radio-row"><label><input type="radio" name="erh" checked> manuell (Quittieren)</label><label><input type="radio" name="erh"> automatisch nach <input type="text" value="24 h" style="width:60px;display:inline-block"></label></div>
+      <div class="hint">Ereignisse haben kein natürliches Gegenstück <span class="badge-frage">offen · Ticket #12</span></div>
+    </div>`,
+  paar: `
+    <div class="fld field"><label>„Auf“-Muster</label><input type="text" value="Leitung ab | connection lost"></div>
+    <div class="fld field"><label>„Zu“-Muster</label><input type="text" value="Leitung wieder da | connection restored"></div>
+    <div class="fld field"><label>Max. Offenzeit</label><input type="text" value="30 min"><div class="hint">so lange darf das Paar offen sein, bevor Gestört ausgelöst wird</div></div>`,
+  schwellwert: `
+    <div class="fld field"><label>Schwelle</label><input type="text" value="mehr als 5 Mails in 30 min"><div class="hint">Meldungssturm/Flapping — erholt, wenn die Rate sich normalisiert</div></div>`,
+  volumen: `
+    <div class="fld field"><label>Normalwert</label><input type="text" value="automatisch erlernen (14 Tage)" readonly><div class="hint">schlecht bei starker Abweichung vom erlernten Normal — Parametrisierung im Detail noch offen <span class="badge-frage">Nebel vor #10</span></div></div>`,
+};
+const REGEL_FELDER = `
+  <div class="fld field"><label>Absender-Muster</label><input type="text" value="veeam@sw-nettetal.de"></div>
+  <div class="fld field"><label>Betreff-Muster</label><input type="text" value="Backup job report*"></div>
+  <div class="fld field"><label>OK-Muster</label><input type="text" value="Success | Erfolgreich | Réussi"><div class="hint">mehrsprachig erlaubt — Regeln sind sprachunabhängig</div></div>
+  <div class="fld field"><label>Fehler-Muster</label><input type="text" value="Failed | Fehler | Error | Échec"><div class="hint">Fehler hat Vorrang; trifft keins von beiden → <b>Unklar</b> (eskaliert mit „Regel überarbeiten“)</div></div>`;
+
+/* =============== Variante A — Kundenboard =============== */
+function renderA() {
+  const app = $('#app');
+  app.className = 'vA';
+  const alarmChips = ALARME.map((a) => {
+    const m = monitorVon(a.monitor); const k = kundeVon(m.kunde);
+    return `<div class="alarmchip" onclick="aOpenDetail('${a.id}')">
+      <span class="grund">▲ ${esc(a.grund)}</span>
+      <span class="was"><b>${esc(k.name)}</b> · ${esc(m.name)}</span>
+      <span class="seit mono">seit ${esc(a.seit)} (${esc(a.dauer)})</span></div>`;
+  }).join('');
+  const cards = KUNDEN.filter((k) => !k.archiviert).map((k) => {
+    const ms = monitoreVonKunde(k.id);
+    const g = ms.filter((m) => m.zustand === 'gestoert' && !m.pausiert).length;
+    const p = ms.filter((m) => m.pausiert).length;
+    const ok = ms.length - g - p;
+    return `<div class="card" onclick="aOpenKunde('${k.id}')">
+      <div class="kname">${kundeAmpel(k.id)} ${esc(k.name)}</div>
+      <div class="counts">
+        ${g ? `<span class="st st-gestoert"><span class="dot"></span>${g} gestört</span>` : ''}
+        ${ok ? `<span class="st st-gesund"><span class="dot"></span>${ok} gesund</span>` : ''}
+        ${p ? `<span class="st st-pausiert"><span class="dot"></span>${p} pausiert</span>` : ''}
+      </div>
+      <div class="meta"><span>${ms.length} Monitore</span><span>${k.autotask ? '⛓ ' + esc(k.autotask) : 'ohne Autotask (Dashboard/Webhook)'}</span></div>
+    </div>`;
+  }).join('');
+  const triage = TRIAGE.map((t, i) => `<div class="triage-item">
+      <span class="grund">⚠ ${esc(t.grund)}</span>
+      <span class="mail"><span class="betreff">${esc(t.mail.betreff)}</span><br><span class="mono">${esc(t.mail.absender)} · ${esc(t.mail.zeit)}</span>
+        ${t.kandidaten ? `<br><span class="mono">Kandidaten: ${esc(t.kandidaten)}</span>` : ''}${t.kunde ? `<br><span class="mono">Kunde: ${esc(t.kunde)}</span>` : ''}</span>
+      <span class="act"><button onclick="toast('Zuordnungs-Flow gehört zu Ticket #9 (Regel-Entstehung)')">${t.kunde ? 'Monitor anlegen…' : 'Zuordnen…'}</button></span>
+    </div>`).join('');
+  app.innerHTML = `
+    <header>
+      <h1>🌙 <span>Nightwatch</span></h1><span class="sub">Kundenboard · ${HEUTE} · 08:05</span>
+      <span class="spacer"></span>
+      <button class="btn-primary" onclick="aWizard(1)">+ Monitor anlegen</button>
+    </header>
+    <main>
+      <h2>Aktive Alarme (${ALARME.length})</h2>
+      <div class="alarmstrip">${alarmChips}</div>
+      <h2>Kunden (${KUNDEN.filter((k) => !k.archiviert).length} aktiv · 1 archiviert)</h2>
+      <div class="cards">${cards}</div>
+      <h2>System-Triage (${TRIAGE.length}) — Zuordnung nicht abgeschlossen, kein Kunden-Ticket</h2>
+      <div class="triage-list">${triage}</div>
+    </main>
+    <div id="a-drawer"></div><div id="a-modal"></div>`;
+}
+function aOpenKunde(kid) {
+  const k = kundeVon(kid);
+  const rows = monitoreVonKunde(kid).map((m) => `
+    <div class="mrow" onclick="aOpenMonitor('${m.id}')">
+      <span class="mname">${esc(m.name)}</span><span class="mart">${ARTEN[m.art].n}</span>${stBadge(m)}
+    </div>`).join('');
+  $('#a-drawer').innerHTML = `
+    <div class="drawer-scrim" onclick="aClose()"></div>
+    <div class="drawer">
+      <button class="close" onclick="aClose()">✕</button>
+      <h3>${kundeAmpel(kid)} ${esc(k.name)}</h3>
+      <div class="sub">${esc(k.merkmale.join(' · '))}<br>${k.autotask ? '⛓ ' + esc(k.autotask) : 'ohne Autotask-Verknüpfung — alarmiert nur über Dashboard/Webhook'}</div>
+      <div class="mlist">${rows}</div>
+    </div>`;
+}
+function aOpenMonitor(mid, backToKunde = true) {
+  const m = monitorVon(mid); const k = kundeVon(m.kunde);
+  const alarm = ALARME.find((a) => a.monitor === mid);
+  $('#a-drawer').innerHTML = `
+    <div class="drawer-scrim" onclick="aClose()"></div>
+    <div class="drawer detail">
+      <button class="close" onclick="aClose()">✕</button>
+      ${backToKunde ? `<button class="back" onclick="aOpenKunde('${k.id}')">← ${esc(k.name)}</button>` : ''}
+      <h3>${esc(m.name)}</h3>
+      <div class="sub">${esc(k.name)} · ${ARTEN[m.art].n}-Monitor</div>
+      ${stBadge(m)}
+      <dl>
+        <dt>Erwartung / Regel</dt><dd>${esc(m.erwartung)}</dd>
+        <dt>Letzte Mail</dt><dd class="mono">${esc(m.letzteMail)}</dd>
+        <dt>Nächste Fälligkeit</dt><dd class="mono">${esc(m.naechste)}</dd>
+        ${alarm ? `<dt>Alarmgrund</dt><dd><b>${esc(alarm.grund)}</b> · seit ${esc(alarm.seit)}</dd>` : ''}
+      </dl>
+      ${alarm ? `
+        <h2 style="font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:#66707c;">Verlauf</h2>
+        <div class="aktionen">${alarm.verlauf.map((v) => `<span class="mono">${esc(v)}</span>`).join('')}</div>
+        ${alarm.mail ? `<div class="mailbox"><div class="betreff">✉ ${esc(alarm.mail.betreff)}</div><div class="mono">${esc(alarm.mail.absender)} · ${esc(alarm.mail.zeit)}</div><div style="margin-top:6px;">${esc(alarm.mail.auszug)}</div></div>` : ''}
+        <h2 style="font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:#66707c;">Ausgelöste Aktionen</h2>
+        <div class="aktionen">${alarm.aktionen.map((x) => `<span class="${x.startsWith('✓') ? 'ok' : ''}">${esc(x)}</span>`).join('')}</div>
+        ${alarm.grund.startsWith('unklar') ? `<a class="rueckverweis" href="#" onclick="toast('Rückverweis: würde direkt zur Regel dieses Monitors springen');return false;">⚙ Regel überarbeiten (Rückverweis)</a>` : ''}
+      ` : ''}
+    </div>`;
+}
+function aOpenDetail(aid) { const a = ALARME.find((x) => x.id === aid); aOpenMonitor(a.monitor, false); }
+function aClose() { $('#a-drawer').innerHTML = ''; }
+let aArt = 'heartbeat';
+function aWizard(step) {
+  const stepNames = ['Kunde & Name', 'Monitor-Art', 'Erkennung (Regel)', 'Parameter'];
+  let body = '';
+  if (step === 1) body = `
+    <div class="field"><label>Kunde</label><select>${KUNDEN.filter((k) => !k.archiviert).map((k) => `<option>${esc(k.name)}</option>`).join('')}</select>
+      <div class="hint">Monitor gehört genau einem Kunden — die Kunden-Zuordnung der Mail passiert vorher über die Zuordnungs-Merkmale.</div></div>
+    <div class="field"><label>Name des Monitors</label><input type="text" placeholder="z. B. Veeam Backup Tagesreport"></div>
+    <div class="field"><label>Regel-Quelle</label>
+      <div class="radio-row"><label><input type="radio" name="quelle" checked> manuell</label>
+      <label><input type="radio" name="quelle"> aus Vorlage <select style="width:auto;display:inline-block;margin-left:6px;"><option>Veeam Backup & Replication</option><option>Synology DSM</option><option>Sophos Firewall</option><option>APC USV</option></select></label></div>
+      <div class="hint">Vorlagen werden kuratiert mit Releases ausgeliefert <span class="badge-frage">Detail · Ticket #9</span></div></div>`;
+  if (step === 2) body = `<div class="artgrid">${Object.entries(ARTEN).map(([id, a]) => `
+      <div class="artopt ${aArt === id ? 'sel' : ''}" onclick="aArt='${id}';aWizard(2)"><div class="an">${a.n}</div><div class="ad">${a.d}</div></div>`).join('')}
+    </div><div class="field"><div class="hint" style="margin-top:10px;">Offenes Set — weitere Arten kommen später hinzu, ohne die Zustandsmaschine zu ändern.</div></div>`;
+  if (step === 3) body = REGEL_FELDER;
+  if (step === 4) body = ART_PARAMS[aArt];
+  $('#a-modal').innerHTML = `
+    <div class="modal-scrim" onclick="aCloseModal()"></div>
+    <div class="modal" onclick="event.stopPropagation()">
+      <button class="close" onclick="aCloseModal()">✕</button>
+      <h3>Monitor anlegen</h3>
+      <div class="stepname">Schritt ${step} von 4 — ${stepNames[step - 1]}${step >= 2 ? ` · Art: ${ARTEN[aArt].n}` : ''}</div>
+      <div class="steps">${[1, 2, 3, 4].map((s) => `<span class="s ${s <= step ? 'on' : ''}"></span>`).join('')}</div>
+      ${body}
+      <footer>
+        ${step > 1 ? `<button class="btn-ghost" onclick="aWizard(${step - 1})">← Zurück</button>` : '<span></span>'}
+        ${step < 4 ? `<button class="btn-primary" onclick="aWizard(${step + 1})">Weiter →</button>`
+                   : `<button class="btn-primary" onclick="aCloseModal();toast('Prototyp: Monitor „angelegt“ (nicht gespeichert)')">Monitor anlegen</button>`}
+      </footer>
+    </div>`;
+  // Scrim-Klick soll schließen, Klick im Modal nicht:
+  $('#a-modal .modal-scrim').appendChild($('#a-modal .modal'));
+}
+function aCloseModal() { $('#a-modal').innerHTML = ''; }
+
+/* =============== Variante B — Leitstand =============== */
+let bSel = 'a1'; let bFormOffen = false; let bArt = 'heartbeat';
+function renderB() {
+  const app = $('#app');
+  app.className = 'vB dark';
+  const g = MONITORE.filter((m) => m.zustand === 'gestoert' && !m.pausiert).length;
+  const p = MONITORE.filter((m) => m.pausiert).length;
+  const ok = MONITORE.length - g - p;
+  const alarmRows = ALARME.map((a) => {
+    const m = monitorVon(a.monitor); const k = kundeVon(m.kunde);
+    return `<div class="alarmrow ${bSel === a.id ? 'sel' : ''}" onclick="bSel='${a.id}';renderB()">
+      <div class="l1"><span class="grund">▲ ${esc(a.grund)}</span><span class="dauer mono">${esc(a.dauer)}</span></div>
+      <div class="l2"><b>${esc(k.name)}</b> · <span>${esc(m.name)}</span></div>
+    </div>`;
+  }).join('');
+  const a = ALARME.find((x) => x.id === bSel);
+  const m = monitorVon(a.monitor); const k = kundeVon(m.kunde);
+  const detail = `
+    <h3>▲ ${esc(m.name)}</h3>
+    <div class="sub">${esc(k.name)} · ${ARTEN[m.art].n}-Monitor · Alarmgrund: <b style="color:#ff7a70">${esc(a.grund)}</b> · seit ${esc(a.seit)}</div>
+    <dl class="kv">
+      <dt>Erwartung / Regel</dt><dd>${esc(m.erwartung)}</dd>
+      <dt>Letzte Mail</dt><dd class="mono">${esc(m.letzteMail)}</dd>
+      <dt>Nächste Fälligkeit</dt><dd class="mono">${esc(m.naechste)}</dd>
+      <dt>Kunde → Ticketweg</dt><dd>${k.autotask ? '⛓ ' + esc(k.autotask) : 'kein Autotask — Dashboard/Webhook'}</dd>
+    </dl>
+    ${a.mail ? `<div class="panelbox"><div class="h">Auslösende Mail</div><b>✉ ${esc(a.mail.betreff)}</b><br><span class="mono" style="color:#8fa0b8">${esc(a.mail.absender)} · ${esc(a.mail.zeit)}</span><br>${esc(a.mail.auszug)}</div>` : ''}
+    <div class="panelbox"><div class="h">Verlauf</div>${a.verlauf.map((v) => `<div class="mono">${esc(v)}</div>`).join('')}</div>
+    <div class="panelbox"><div class="h">Ausgelöste Aktionen</div>${a.aktionen.map((x) => `<div class="${x.startsWith('✓') ? 'ok' : ''}">${esc(x)}</div>`).join('')}</div>
+    <div class="actions">
+      <button class="btn-ghost" onclick="toast('Quittieren: Konzept offen — mutet ein Ack die Eskalation? → Ticket #12')">✔ Quittieren</button>
+      <button class="btn-ghost" onclick="toast('Pausieren würde den Monitor in Wartung setzen (Überlagerung, kein Aus)')">‖ Pausieren</button>
+      ${a.grund.startsWith('unklar') ? `<button class="btn-ghost" onclick="toast('Rückverweis: direkt zur Regel dieses Monitors')">⚙ Regel überarbeiten</button>` : ''}
+      <span class="badge-frage">Quittieren/Eskalation offen · Ticket #12</span>
+    </div>`;
+  const rows = MONITORE.map((mm) => {
+    const kk = kundeVon(mm.kunde);
+    return `<tr class="mtr">
+      <td>${esc(kk.name)}</td><td><b>${esc(mm.name)}</b></td><td><span class="artchip">${ARTEN[mm.art].n}</span></td>
+      <td>${stBadge(mm)}</td><td class="mono">${esc(mm.letzteMail)}</td><td class="mono">${esc(mm.naechste)}</td>
+    </tr>`;
+  }).join('');
+  const triageRows = TRIAGE.map((t) => `<tr>
+      <td class="triagechip">⚠ ${esc(t.grund)}</td><td colspan="2"><b>${esc(t.mail.betreff)}</b></td>
+      <td colspan="2" class="mono">${esc(t.mail.absender)} · ${esc(t.mail.zeit)}${t.kandidaten ? ' · Kandidaten: ' + esc(t.kandidaten) : ''}${t.kunde ? ' · Kunde: ' + esc(t.kunde) : ''}</td>
+      <td><button class="btn-ghost" onclick="toast('Zuordnungs-Flow gehört zu Ticket #9')">${t.kunde ? 'Monitor anlegen…' : 'Zuordnen…'}</button></td>
+    </tr>`).join('');
+  app.innerHTML = `
+    <header>
+      <h1>Nightwatch — Leitstand</h1><span class="uhr mono">${HEUTE} · 08:05:12</span>
+      <div class="counters">
+        <div class="counter crit"><div class="n">${ALARME.length}</div><div class="t">Alarme</div></div>
+        <div class="counter warn"><div class="n">${TRIAGE.length}</div><div class="t">Triage</div></div>
+        <div class="counter ok"><div class="n">${ok}</div><div class="t">Gesund</div></div>
+        <div class="counter pause"><div class="n">${p}</div><div class="t">Pausiert</div></div>
+      </div>
+      <button class="btn-primary" style="margin-left:22px" onclick="bFormOffen=!bFormOffen;renderB()">${bFormOffen ? '✕ Formular schließen' : '+ Regel anlegen'}</button>
+    </header>
+    ${bFormOffen ? bForm() : ''}
+    <div class="split">
+      <div class="alarmcol"><div class="colhead">Aktive Alarme — nach Dauer</div>${alarmRows}</div>
+      <div class="detailpane">${detail}</div>
+    </div>
+    <div class="colhead" style="padding:14px 26px 4px">Alle Monitore (${MONITORE.length}) · System-Triage (${TRIAGE.length})</div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Kunde</th><th>Monitor</th><th>Art</th><th>Zustand</th><th>Letzte Mail</th><th>Nächste Fälligkeit</th></tr></thead>
+      <tbody>${rows}${triageRows}</tbody>
+    </table></div>`;
+}
+function bForm() {
+  return `<div class="formpanel">
+    <h3>Neue Regel — alles auf einen Blick</h3>
+    <div class="fgrid">
+      <div class="fld"><label>Kunde</label><select>${KUNDEN.filter((kk) => !kk.archiviert).map((kk) => `<option>${esc(kk.name)}</option>`).join('')}</select></div>
+      <div class="fld"><label>Monitor-Name</label><input type="text" placeholder="z. B. Veeam Backup Tagesreport"></div>
+      <div class="fld"><label>Monitor-Art</label><select onchange="bArt=this.value;bFormOffen=true;renderB()">${Object.entries(ARTEN).map(([id, aa]) => `<option value="${id}" ${bArt === id ? 'selected' : ''}>${aa.n}</option>`).join('')}</select><div class="hint">${ARTEN[bArt].d}</div></div>
+      <div class="fsection">Erkennung (Regel) — Muster dürfen mehrsprachig sein</div>
+      ${REGEL_FELDER}
+      <div class="fsection">Parameter — ${ARTEN[bArt].n}</div>
+      ${ART_PARAMS[bArt]}
+    </div>
+    <div class="formfoot">
+      <button class="btn-primary" onclick="bFormOffen=false;renderB();toast('Prototyp: Regel „angelegt“ (nicht gespeichert)')">Regel anlegen</button>
+      <button class="btn-ghost" onclick="bFormOffen=false;renderB()">Abbrechen</button>
+      <span class="badge-frage">Regel-Quelle „Vorlage/gelernt“ · Ticket #9</span>
+    </div>
+  </div>`;
+}
+
+/* =============== Variante C — Zeitachse =============== */
+let cOffen = { stadtwerke: true, brenner: true, hoffmann: true, weber: true, intern: true };
+let cExpand = 'm1';
+let cMailSel = null;
+const C_MAILS = [
+  { id: 'cm1', betreff: 'Veeam: Backup job report — Success', absender: 'veeam@sw-nettetal.de', zeit: 'Do 23.07. 05:41', kunde: 'Stadtwerke Nettetal', vorschlag: { art: 'heartbeat', rhythmus: 'werktäglich ~05:40 erkannt (6 Mails / 7 Tage)', absender: 'veeam@sw-nettetal.de', betreff: 'Backup job report*', ok: 'Success', fehler: 'Failed | Error' } },
+  { id: 'cm2', betreff: 'DSM: Speicherpool-Zustand', absender: 'no-reply@synology.com', zeit: 'heute 03:05', triage: 'Mehrdeutig', vorschlag: { art: 'heartbeat', rhythmus: 'kein Rhythmus erkennbar (1 Mail)', absender: 'no-reply@synology.com', betreff: 'DSM: Speicherpool*', ok: 'fehlerfrei | healthy', fehler: 'degraded | Fehler' } },
+  { id: 'cm3', betreff: 'HP LaserJet M479: Tonerstand niedrig', absender: 'drucker@kanzlei-hoffmann.de', zeit: 'gestern 16:44', triage: 'Kunde erkannt, kein Monitor passt', vorschlag: { art: 'ereignis', rhythmus: 'unregelmäßig — spricht für Ereignis-Monitor', absender: 'drucker@kanzlei-hoffmann.de', betreff: '*Tonerstand niedrig*', ok: '—', fehler: 'Tonerstand niedrig' } },
+  { id: 'cm4', betreff: 'Camera offline notification (Cam 03)', absender: 'monitoring@hikvision-cloud.com', zeit: 'heute 02:14', triage: 'Kein Kunde erkannt', vorschlag: { art: 'ereignis', rhythmus: 'unregelmäßig — spricht für Ereignis-Monitor', absender: 'monitoring@hikvision-cloud.com', betreff: 'Camera offline*', ok: 'Camera online', fehler: 'Camera offline' } },
+];
+function renderC() {
+  const app = $('#app');
+  app.className = 'vC';
+  const gruppen = KUNDEN.filter((k) => !k.archiviert).map((k) => {
+    const ms = monitoreVonKunde(k.id);
+    const offen = cOffen[k.id];
+    const zeilen = !offen ? '' : ms.map((m) => {
+      const alarm = ALARME.find((x) => x.monitor === m.id);
+      const due = m.naechste.includes('überfällig');
+      return `<div class="mline ${m.zustand === 'gestoert' && !m.pausiert ? 'gestoert' : ''}">
+          <div><span class="mname" onclick="cExpand=cExpand==='${m.id}'?null:'${m.id}';renderC()">${esc(m.name)}</span><br><span class="mart">${ARTEN[m.art].n}</span></div>
+          ${dotStrip(m)}
+          <div class="next ${due ? 'due' : ''} mono">${esc(m.naechste)}</div>
+          ${stBadge(m)}
+        </div>
+        ${cExpand === m.id ? cDetail(m, alarm) : ''}`;
+    }).join('');
+    return `<div class="kgroup">
+      <div class="khead" onclick="cOffen['${k.id}']=!${offen};renderC()">
+        <span class="caret">${offen ? '▼' : '►'}</span><span class="kname">${esc(k.name)}</span>
+        <span class="ksum">${kundeAmpel(k.id)}</span>
+      </div>${zeilen}</div>`;
+  }).join('');
+  const mails = C_MAILS.map((mm) => `
+    <div class="mailrow ${cMailSel === mm.id ? 'sel' : ''}" onclick="cMailSel=cMailSel==='${mm.id}'?null:'${mm.id}';renderC()">
+      ${mm.triage ? `<div class="tri">⚠ ${esc(mm.triage)}</div>` : ''}
+      <div class="b">✉ ${esc(mm.betreff)}</div>
+      <div class="m mono">${esc(mm.absender)} · ${esc(mm.zeit)}${mm.kunde ? ' · ' + esc(mm.kunde) : ''}</div>
+    </div>`).join('');
+  const sel = C_MAILS.find((x) => x.id === cMailSel);
+  const form = !sel ? '<div class="vorschlag"><span class="leer">Mail auswählen — Nightwatch schlägt eine Regel daraus vor.</span></div>' : `
+    <div class="vorschlag">
+      <div class="fld"><label>Monitor-Art <span class="vs-badge">Vorschlag</span></label>
+        <select>${Object.entries(ARTEN).map(([id, aa]) => `<option ${sel.vorschlag.art === id ? 'selected' : ''}>${aa.n}</option>`).join('')}</select></div>
+      <div class="fld"><label>Erkannter Rhythmus <span class="vs-badge">Vorschlag</span></label><input type="text" value="${esc(sel.vorschlag.rhythmus)}" readonly></div>
+      <div class="fld"><label>Absender-Muster</label><input type="text" value="${esc(sel.vorschlag.absender)}"></div>
+      <div class="fld"><label>Betreff-Muster <span class="vs-badge">Vorschlag</span></label><input type="text" value="${esc(sel.vorschlag.betreff)}"></div>
+      <div class="fld"><label>OK-Muster</label><input type="text" value="${esc(sel.vorschlag.ok)}"></div>
+      <div class="fld"><label>Fehler-Muster</label><input type="text" value="${esc(sel.vorschlag.fehler)}"></div>
+      <div class="fld"><label>Kunde</label><select>${sel.kunde ? `<option>${esc(sel.kunde)}</option>` : KUNDEN.filter((k) => !k.archiviert).map((k) => `<option>${esc(k.name)}</option>`).join('')}</select></div>
+      <button class="btn-primary" onclick="toast('Prototyp: Monitor aus Mail „angelegt“ (nicht gespeichert)')">Monitor daraus anlegen</button>
+      <div style="margin-top:8px"><span class="badge-frage">Soll Nightwatch das aktiv vorschlagen? · Ticket #9</span></div>
+    </div>`;
+  app.innerHTML = `
+    <header>
+      <h1>Nightwatch — <em>Zeitachse</em></h1><span class="sub">Erwartet vs. eingetroffen, letzte 7 Tage · ${HEUTE} · 08:05</span>
+      <span class="spacer"></span>
+      <div class="legende">
+        <span><span class="d d-ok" style="display:inline-block"></span> OK</span>
+        <span><span class="d d-fehler" style="display:inline-block"></span> Fehler/Ereignis</span>
+        <span><span class="d d-unklar" style="display:inline-block"></span> Unklar</span>
+        <span><span class="d d-fehlt" style="display:inline-block"></span> fehlt (überfällig)</span>
+        <span><span class="d d-pause" style="display:inline-block"></span> pausiert</span>
+      </div>
+    </header>
+    <main><div class="layout">
+      <div>
+        <div class="daylabels"><span class="cap">Monitor</span><div class="lbls">${DAYS.map((d) => `<span>${d}</span>`).join('')}</div><span class="cap r">Nächste Fälligkeit</span><span class="cap r">Zustand</span></div>
+        ${gruppen}
+      </div>
+      <aside>
+        <h2>Regel aus Mail ableiten</h2>
+        <div class="sub">Letzte unverbrauchte Mails — inkl. System-Triage (${TRIAGE.length})</div>
+        <div class="maillist">${mails}</div>
+        ${form}
+      </aside>
+    </div></main>`;
+}
+function cDetail(m, alarm) {
+  const k = kundeVon(m.kunde);
+  return `<div class="expand">
+    <h4>${esc(m.name)} — ${esc(k.name)}</h4>
+    <dl class="kv">
+      <dt>Erwartung / Regel</dt><dd>${esc(m.erwartung)}</dd>
+      <dt>Letzte Mail</dt><dd class="mono">${esc(m.letzteMail)}</dd>
+      ${alarm ? `<dt>Alarmgrund</dt><dd><b style="color:#b32e2e">${esc(alarm.grund)}</b> · seit ${esc(alarm.seit)} (${esc(alarm.dauer)})</dd>
+      <dt>Verlauf</dt><dd class="mono">${alarm.verlauf.map(esc).join('<br>')}</dd>
+      <dt>Aktionen</dt><dd>${alarm.aktionen.map(esc).join('<br>')}</dd>` : ''}
+    </dl>
+    ${alarm && alarm.mail ? `<div class="kv" style="margin-top:8px"><dt>Auslösende Mail</dt><dd><b>${esc(alarm.mail.betreff)}</b><br><span class="mono">${esc(alarm.mail.absender)} · ${esc(alarm.mail.zeit)}</span><br>${esc(alarm.mail.auszug)}</dd></div>` : ''}
+    ${alarm ? `<a class="rueck" href="#" onclick="toast('Rückverweis: direkt zur Regel dieses Monitors');return false;">⚙ Regel überarbeiten</a>` : ''}
+  </div>`;
+}
+
+/* =============== Varianten-Router + Switcher =============== */
+const VARIANTEN = { A: { name: 'Kundenboard — Karten & Drawer', render: renderA }, B: { name: 'Leitstand — dunkle NOC-Konsole', render: renderB }, C: { name: 'Zeitachse — erwartet vs. eingetroffen', render: renderC } };
+const KEYS = Object.keys(VARIANTEN);
+function aktVariante() {
+  const v = new URLSearchParams(location.search).get('variant');
+  return KEYS.includes(v) ? v : 'A';
+}
+function zeige(v) {
+  const url = new URL(location.href);
+  url.searchParams.set('variant', v);
+  history.replaceState(null, '', url);
+  VARIANTEN[v].render();
+  document.getElementById('pb-key').textContent = 'Variante ' + v;
+  document.getElementById('pb-name').textContent = VARIANTEN[v].name;
+  window.scrollTo(0, 0);
+}
+function schritt(delta) {
+  const i = (KEYS.indexOf(aktVariante()) + delta + KEYS.length) % KEYS.length;
+  zeige(KEYS[i]);
+}
+document.getElementById('pb-prev').addEventListener('click', () => schritt(-1));
+document.getElementById('pb-next').addEventListener('click', () => schritt(1));
+document.addEventListener('keydown', (e) => {
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+  if (e.key === 'ArrowLeft') schritt(-1);
+  if (e.key === 'ArrowRight') schritt(1);
+});
+zeige(aktVariante());
+</script>
+
+</body>
+</html>
