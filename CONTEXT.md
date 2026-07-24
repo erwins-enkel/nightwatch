@@ -4,7 +4,7 @@ E-Mail-Monitoring für MSPs/IT-Systemhäuser. Kern ist das Erkennen **ausbleiben
 erwarteter Benachrichtigungsmails (Heartbeat) — plus klassische Fehler- und Ereignis-Erkennung.
 Dieses Glossar ist die verbindliche Sprache des Efforts (Deutsch).
 
-> Status: in Arbeit über Wayfinder-Map #1, Ticket #5 (Domänenmodell). Begriffe mit
+> Status: in Arbeit über Wayfinder-Map #1 (Domänenmodell #5, Kunden-Matching #6). Begriffe mit
 > „(vorläufig)" sind inhaltlich geklärt, aber der Name ist noch nicht ratifiziert.
 
 ## Language
@@ -14,7 +14,8 @@ Dieses Glossar ist die verbindliche Sprache des Efforts (Deutsch).
 **Monitor**:
 Die atomare Überwachungseinheit — eine pro überwachtem Ding: das **Was**. Führt einen
 Gesundheitszustand und alarmiert bei Störung/Erholung nach außen. Hat genau eine **Monitor-Art**,
-(bei Heartbeat) eine **Erwartung** und genau eine **Regel**. Der Mensch legt ihn bewusst an.
+(bei Heartbeat) eine **Erwartung** und genau eine **Regel**; gehört genau einem **Kunden**.
+Der Mensch legt ihn bewusst an.
 _Avoid_: Wächter, Überwachung, Check.
 
 **Monitor-Art**:
@@ -72,6 +73,55 @@ Ein manuell gesetztes Datum, an dem eine Kalenderplan-Erwartung ausgesetzt ist (
 Deckt Feiertage ab, solange kein automatischer Feiertagskalender existiert (Folgeversion). Kann als
 benannter, wiederverwendbarer Ausnahmekalender gebündelt werden.
 
+### Kunde & Zuordnung
+
+**Kunde**:
+Eigene Entität: das Unternehmen, dessen Systeme überwacht werden. Träger der
+**Zuordnungs-Merkmale** und der optionalen **Autotask-Verknüpfung**; jeder Monitor gehört genau
+einem Kunden. Das Systemhaus selbst wird für die eigene Infrastruktur als ganz normaler Kunde
+geführt — kein Sonderkonzept „intern". Lebenszyklus: aktiv ⇄ **archiviert**; hartes Löschen nur
+für Fehlanlagen ohne Historie.
+
+**Kunden-Zuordnung**:
+Die zweistufige Pipeline **Mail → Kunde → Monitor**: erst bestimmt Nightwatch über die
+Zuordnungs-Merkmale den Kunden, dann matchen nur noch die Monitore *dieses* Kunden. Der Kunde
+steht damit auch dann fest, wenn kein Monitor passt — das wertvollste Triage-Signal.
+
+**Zuordnungs-Merkmal**:
+Ein Merkmal am Kunden, über das eingehende Mails ihm zugeordnet werden. Feste, globale Priorität:
+1. **Empfänger-Plus-Adresse** (`noc+kundea@…`, vom MSP vergeben, deterministisch),
+2. **Kundennummer/Inhaltsmuster**, 3. **Absender** (Adresse oder Domain). Die höchste treffende
+Stufe gewinnt sofort — kein Scoring, denn „warum landete die Mail bei Kunde B?" muss auf einen
+Blick beantwortbar sein. _Avoid_: Score, Gewichtung.
+
+**Mehrdeutig**:
+Mehrere Kunden treffen auf **derselben** Stufe. Nightwatch rät nicht: die Mail geht in die
+**System-Triage**, mit sichtbaren Kandidaten. Ein Ticket beim falschen Kunden ist der teuerste
+Fehler der Zuordnung.
+
+**Kollisionswarnung**:
+Hinweis beim Pflegen eines Zuordnungs-Merkmals, das identisch schon bei einem anderen — auch
+archivierten — Kunden steht. Speichern bleibt erlaubt (Übergangsphasen), aber Mehrdeutigkeit wird
+an der Quelle sichtbar gemacht: bei der Konfiguration, nicht erst in der Mail.
+
+**System-Triage**:
+Die eine Dashboard-Liste für alles, was die Zuordnung nicht abschließen konnte, mit drei
+Eingangs-Gründen: **kein Kunde erkannt** · **mehrdeutig** · **Kunde erkannt, aber kein Monitor
+passt**. Erzeugt kein Kunden-Ticket. Es gibt bewusst **keinen Default-Kunden** als Auffangbecken —
+der würde Konfigurationslücken unsichtbar machen, dieselbe Sorte blinder Fleck wie die ausgebliebene
+Mail, die niemand vermisst. Speist die Regel-Entstehung (Ticket #9).
+
+**Autotask-Verknüpfung**:
+Optionale Verknüpfung eines Kunden mit seiner Autotask-Company (per Suche gesetzt, die stabile
+Company-ID wird gespeichert; kein Dauer-Sync). Ohne Verknüpfung alarmiert der Kunde nur über
+Dashboard und Webhook — legitim, nicht jeder Betreiber nutzt Autotask.
+
+**Archiviert** _(Kunde)_:
+Lebenszyklus-Zustand nach dem Offboarding. Monitore werden mitarchiviert (keine Auswertung, keine
+Alarme, keine Dashboard-Ampel); offene Gestört-Zustände enden still **ohne** Entwarnung. Die
+Zuordnungs-Merkmale greifen aber **weiter**: Rest-Mails abgeklemmter Geräte werden dem archivierten
+Kunden zugerechnet und still abgelegt statt die System-Triage zu fluten. Historie bleibt erhalten.
+
 ### Klassifikation & Zuordnung
 
 **Regel**:
@@ -88,8 +138,9 @@ Eine mitgelieferte, kuratierte Regel für die Benachrichtigungen eines bekannten
 → Ticket #9.
 
 **Match-Kriterien**:
-Die Merkmale, mit denen ein Monitor „seine" Mails erkennt: Absender, Betreff-Muster, Empfänger inkl.
-Plus-Notation (`noc+kundea@…`), Schlüsselwörter. Konfliktauflösung bei Mehrfach-Treffern → Ticket #6.
+Die Merkmale, mit denen ein Monitor „seine" Mails erkennt: Absender, Betreff-Muster, Schlüsselwörter.
+Wirken erst **nach** der Kunden-Zuordnung, nur innerhalb der Monitore des erkannten Kunden — die
+Unterscheidung der Kunden ist Sache der **Zuordnungs-Merkmale**, nicht der Match-Kriterien.
 
 **Klassifikation**:
 Dreiwertige Beurteilung einer zugeordneten Mail: **OK** (OK-Muster trifft) / **Fehler** (Fehler-Muster
@@ -109,8 +160,9 @@ Kunden-Ticket, Kunde ist bekannt), aber mit eigenem Alarmgrund und empfohlener A
 durchrutschen.
 
 **Unzugeordnet**:
-Eine Mail, die zu **keinem** Monitor passt. Erzeugt **kein** Kunden-Ticket (Kunde unbekannt), sondern
-landet in einer **System-Triage** im Dashboard. Speist die Regel-Entstehung (Ticket #9).
+Eine Mail, die die Kunden-Zuordnung nicht abschließen konnte — kein Kunde erkannt, mehrdeutig, oder
+Kunde erkannt, aber kein Monitor passt. Erzeugt **kein** Kunden-Ticket, sondern landet mit ihrem
+Grund in der **System-Triage**. Speist die Regel-Entstehung (Ticket #9).
 
 ### Zustandsmaschine
 
