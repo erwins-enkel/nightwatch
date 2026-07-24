@@ -4,8 +4,9 @@ E-Mail-Monitoring für MSPs/IT-Systemhäuser. Kern ist das Erkennen **ausbleiben
 erwarteter Benachrichtigungsmails (Heartbeat) — plus klassische Fehler- und Ereignis-Erkennung.
 Dieses Glossar ist die verbindliche Sprache des Efforts (Deutsch).
 
-> Status: in Arbeit über Wayfinder-Map #1 (Domänenmodell #5, Kunden-Matching #6). Begriffe mit
-> „(vorläufig)" sind inhaltlich geklärt, aber der Name ist noch nicht ratifiziert.
+> Status: in Arbeit über Wayfinder-Map #1 (Domänenmodell #5, Kunden-Matching #6,
+> Regel-Entstehung #9). Begriffe mit „(vorläufig)" sind inhaltlich geklärt, aber der Name ist
+> noch nicht ratifiziert.
 
 ## Language
 
@@ -105,11 +106,15 @@ archivierten — Kunden steht. Speichern bleibt erlaubt (Übergangsphasen), aber
 an der Quelle sichtbar gemacht: bei der Konfiguration, nicht erst in der Mail.
 
 **System-Triage**:
-Die eine Dashboard-Liste für alles, was die Zuordnung nicht abschließen konnte, mit drei
-Eingangs-Gründen: **kein Kunde erkannt** · **mehrdeutig** · **Kunde erkannt, aber kein Monitor
-passt**. Erzeugt kein Kunden-Ticket. Es gibt bewusst **keinen Default-Kunden** als Auffangbecken —
-der würde Konfigurationslücken unsichtbar machen, dieselbe Sorte blinder Fleck wie die ausgebliebene
-Mail, die niemand vermisst. Speist die Regel-Entstehung (Ticket #9).
+Die eine Dashboard-Liste für alles, was die Zuordnung nicht abschließen konnte. Führt **einzeln**
+die beiden Kunden-Gründe: **kein Kunde erkannt** · **mehrdeutig** — echte Ausnahmen, die einzeln
+entschieden werden. Der dritte Grund, **Kunde erkannt, aber kein Monitor passt**, wird bewusst
+*nicht* einzeln geführt, sondern gruppiert als **unüberwachte Mail-Sorte**; sonst schüttet ein frisch
+verbundenes Postfach mit null Monitoren jede eingehende Mail in die Triage. Erzeugt kein
+Kunden-Ticket. Es gibt bewusst **keinen Default-Kunden** als Auffangbecken — der würde
+Konfigurationslücken unsichtbar machen, dieselbe Sorte blinder Fleck wie die ausgebliebene Mail, die
+niemand vermisst. Das Auflösen eines Eintrags legt dauerhaft ein **Zuordnungs-Merkmal** an, statt nur
+die eine Mail zuzuordnen — sonst läge dieselbe Mail morgen wieder hier.
 
 **Autotask-Verknüpfung**:
 Optionale Verknüpfung eines Kunden mit seiner Autotask-Company (per Suche gesetzt, die stabile
@@ -129,13 +134,18 @@ Die Erkennungs-Logik innerhalb eines Monitors: Match-Kriterien + OK-/Fehler-Must
 erkenne ich's**). Der veränder- und lernbare Teil — „Regel überarbeiten" schärft die Muster nach,
 ohne den Monitor neu zu bauen. Genau eine Regel pro Monitor. **Sprachunabhängig**: dieselbe Software
 meldet je nach Konfig „Backup completed" / „Sicherung erfolgreich" / „Sauvegarde terminée" — Muster
-dürfen mehrsprachig sein, und der **Klassifikator** deckt ab, was starre Muster nicht treffen (keine
-eigene Sprach-Erkennung als v1-Kernkonzept nötig). Herkunft einer Regel → Ticket #9.
+dürfen mehrsprachig sein, und der **Klassifikator** deckt ab, was starre Muster nicht treffen. Eine
+dedizierte Sprach-Erkennungs-Library ist dafür **nicht** nötig: die automatisch abgeleitete Schicht
+(Absender, Betreff-Signatur, Takt) ist sprachneutral, die per Hand markierte Schicht ist es
+konstruktionsbedingt. Herkunft einer Regel → **Regel-Quelle**.
 
 **Regel-Vorlage**:
 Eine mitgelieferte, kuratierte Regel für die Benachrichtigungen eines bekannten Herstellers/Produkts
-(„Veeam-Report erkennen wir out of the box"). Dritte Regel-Quelle neben manuell und gelernt; Detail
-→ Ticket #9.
+(„Veeam-Report erkennen wir out of the box"). Eine der drei **Regel-Quellen**. Liegt als
+versionierte Daten-Datei **im Container-Image** und wird **mit Releases** aktualisiert — kein
+eigener Nachlade-Kanal neben dem Releases-Check, keine Netzwerkabhängigkeit im Betrieb. Der
+Betreiber kann eigene Regeln als Vorlage **exportieren und importieren** und sich so einen eigenen
+Fundus bauen, ohne dass Daten das Haus verlassen.
 
 **Match-Kriterien**:
 Die Merkmale, mit denen ein Monitor „seine" Mails erkennt: Absender, Betreff-Muster, Schlüsselwörter.
@@ -151,7 +161,9 @@ Die austauschbare Engine, die eine zugeordnete Mail als OK/Fehler/Unklar beurtei
 muster-basiert (Regex/Betreff/Absender), mit sauberer **Naht für intelligente Extraktion** aus
 unstrukturierten Berichts-Mails — lokales Modell **oder** ein vom Betreiber optional angebundener
 LLM (bleibt selfhosted-konform, weil optional und selbst konfiguriert). Der Differenzierer gegenüber
-starrem Regex-Parsing (Beta-Tester-Signal). Detail → Ticket #9, Tech-Naht → #7.
+starrem Regex-Parsing (Beta-Tester-Signal). Wirkt zur **Laufzeit** — er beurteilt eingehende Mails
+und senkt die **Unklar**-Quote —, **nicht** zur Anlagezeit: beim Anlegen einer Regel schlägt er
+keine OK-/Fehler-Muster vor. Tech-Naht → #7.
 
 **Unklar**:
 Eine zugeordnete, aber nicht eindeutig klassifizierbare Mail. **Eskaliert** wie ein Fehler (erzeugt
@@ -161,8 +173,64 @@ durchrutschen.
 
 **Unzugeordnet**:
 Eine Mail, die die Kunden-Zuordnung nicht abschließen konnte — kein Kunde erkannt, mehrdeutig, oder
-Kunde erkannt, aber kein Monitor passt. Erzeugt **kein** Kunden-Ticket, sondern landet mit ihrem
-Grund in der **System-Triage**. Speist die Regel-Entstehung (Ticket #9).
+Kunde erkannt, aber kein Monitor passt. Erzeugt **kein** Kunden-Ticket. Die ersten beiden Gründe
+landen einzeln in der **System-Triage**, der dritte gruppiert als **unüberwachte Mail-Sorte**. Beide
+Wege speisen die **Regel-Entstehung**.
+
+### Regel-Entstehung
+
+**Regel-Quelle**:
+Woher eine neue Regel stammt. Drei Quellen: **manuell** (der Mensch füllt alles) · **Regel-Vorlage**
+(kuratiert mitgeliefert) · **aus Mail abgeleitet** (aus einer Beispiel-Mail gewonnen). Die Quelle ist
+nur die Startrampe — alle drei münden in dieselbe Anlage-Fläche und unterscheiden sich allein im
+**Vorbefüllungs-Grad**. Keine Regel wird ohne menschliche Bestätigung aktiv.
+
+**Vorbefüllungs-Grad**:
+Wie viel die **Regel-Quelle** in die Anlage-Fläche schreibt, bevor der Mensch bestätigt: nichts
+(manuell) · Art + Erkennung + Parameter-Defaults (Vorlage) · Erkennung + Art-Vermutung + Takt
+(aus Mail). Ein Begriff statt dreier getrennter Anlage-Wege — ein mentales Modell, ein
+Bestätigungs-Gate, und der Klassifikator-Steckplatz sitzt an genau einer Stelle.
+
+**Lernfenster** _(Backfill)_:
+Der begrenzte Vorrat vergangener Mails, den Nightwatch beim Verbinden eines Postfachs einmalig zieht
+(Größenordnung 30 Tage, konfigurierbar). Er speist **Mail-Suche**, Ableitung aus Mail und
+Takt-Erkennung — denn Delta-Polling liefert sonst nur Neues, und ohne Vorrat wäre die Ableitung an
+Tag 1 zahnlos. Es gilt strikt:
+> **Historie ist Lernmaterial, nicht Überwachungsmaterial.**
+
+Ein Monitor wertet ausschließlich **ab seiner Aktivierung vorwärts**, nie rückwirkend. Kein Alarm
+und kein Ticket für eine Lücke, die vor der Anlage lag — sonst wäre jedes frisch verbundene Postfach
+eine Ticket-Lawine.
+
+**Unüberwachte Mail-Sorte**:
+Eine wiederkehrende Mail-Sorte eines bekannten Kunden, für die es noch keinen Monitor gibt —
+gruppiert nach **Sorten-Signatur**, mit Anzahl, letztem Eingang und erkanntem Takt. Ersetzt für den
+Triage-Grund „Kunde erkannt, kein Monitor" die Einzel-Einträge und ist zugleich der
+Onboarding-Einstieg und die Heimat der Vorschläge („diese Sorte kommt täglich — überwachen?"). Eine
+Ansicht, die der Betreiber **öffnet** — kein Hintergrund-Scan, der ihm Kandidaten aufdrängt. Die
+Gruppierung ist auch die ehrlichere Darstellung: nicht 400 Probleme, sondern 7 unüberwachte Sorten.
+
+**Sorten-Signatur**:
+Das Merkmal, nach dem gleichartige Mails zu einer **unüberwachten Mail-Sorte** zusammengefasst
+werden (Absender + Betreff-Muster). Nicht zu verwechseln mit den **Match-Kriterien**: die Signatur
+gruppiert *noch unüberwachte* Mails zur Ansicht, die Match-Kriterien binden Mails an einen
+*bestehenden* Monitor.
+
+**Ignorierte Sorte**:
+Eine bewusst abgewählte **unüberwachte Mail-Sorte** („nicht überwachen") — Newsletter, Rechnungen,
+Hersteller-Werbung. Verschwindet aus der Arbeitsliste in eine einsehbare **Ablage** und ist von dort
+zurückholbar; neue Vorkommen tauchen nicht wieder auf. Wirkt **pro Kunde und Sorte**, nie global —
+ein bei Kunde A abgewählter Absender darf dieselbe Sorte bei Kunde B nicht mit ausblenden. Zusammen
+mit der Regel, dass nur Wiederkehrendes überhaupt gelistet wird, macht das die Liste **auf null
+fahrbar**; „null" heißt dann: alles Wiederkehrende in diesem Postfach ist überwacht oder bewusst
+abgewählt.
+
+**Mail-Suche**:
+Der freie Zugriff auf **alle** ingestierten Mails — auch ignorierte, einmalige und bereits
+überwachte. Gegenstück zur kuratierten Liste der unüberwachten Sorten: diese sagt, was zu tun ist,
+die Suche beantwortet alles andere („was hat der Monitor gestern gesehen?", „kam von diesem Absender
+je etwas?"). Der Ausweg, wenn die Gruppierung danebenliegt. Aus einem Treffer startet die
+Regel-Anlage vorbefüllt.
 
 ### Zustandsmaschine
 
