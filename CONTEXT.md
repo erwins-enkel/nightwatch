@@ -5,8 +5,8 @@ erwarteter Benachrichtigungsmails (Heartbeat) — plus klassische Fehler- und Er
 Dieses Glossar ist die verbindliche Sprache des Efforts (Deutsch).
 
 > Status: in Arbeit über Wayfinder-Map #1 (Domänenmodell #5, Kunden-Matching #6,
-> Regel-Entstehung #9, Alarm-Lebenszyklus #12). Begriffe mit „(vorläufig)" sind inhaltlich
-> geklärt, aber der Name ist noch nicht ratifiziert.
+> Regel-Entstehung #9, Alarm-Lebenszyklus #12, Self-Monitoring #11). Begriffe mit „(vorläufig)"
+> sind inhaltlich geklärt, aber der Name ist noch nicht ratifiziert.
 
 ## Language
 
@@ -301,10 +301,44 @@ offenes Ticket zwischendurch automatisch kommentiert wird — weitere Vorkommen 
 werden nur intern gezählt (Zähler, „zuletzt gesehen"), die Zusammenfassung kommt mit der Entwarnung.
 
 **Ingestion-Gate**:
-Zurückhalten aller Überfällig-Alarme, solange die Ingestion selbst nachweislich gestört ist (kein
-Polling, Auth-Fehler) — statt einer Flut falscher Kunden-Tickets feuert genau ein Selbst-Alarm.
-Stopft die größte Sturmquelle an der Wurzel. Mechanik → Self-Monitoring (#11).
+Aussetzen (nicht Verwerfen) der Überfällig-Entscheidungen, solange die Ingestion selbst
+nachweislich gestört ist (kein Polling, Auth-Fehler) — statt einer Flut falscher Kunden-Tickets
+feuert genau ein Selbst-Alarm. Wirkt **postfach-scharf**: jeder Monitor kennt sein Postfach über
+die zuletzt zugeordneten Mails; ist der globale **Selbst-Monitor** gestört, gilt das Gate für
+alles. Fälligkeit wird gegen die **Postfach-Ankunftszeit** der Mail bewertet, nicht gegen den
+Verarbeitungszeitpunkt — nach dem Aufholen des Rückstands steht fest, was wirklich fehlte
+(alarmiert jetzt) und was nur spät verarbeitet wurde (bleibt gesund, feuert nie). Öffnet erst
+nach stabiler Erholung des Selbst-Monitors **und** aufgeholtem Rückstand. Stopft die größte
+Sturmquelle an der Wurzel.
 
 **Rückverweis**:
 Deep-Link, den jeder Alarm bzw. jedes erzeugte Ticket zurück ins Nightwatch-UI trägt — direkt zum
 auslösenden Monitor bzw. seiner Regel, um das Monitoring zu überarbeiten.
+
+### Self-Monitoring
+
+**Selbst-Monitor**:
+Eingebauter System-Monitor, mit dem Nightwatch sich selbst überwacht. Zwei Ausprägungen: einer
+**pro Postfach** („Ingestion Postfach X" — Polling ausgefallen oder Zugriff entzogen) und ein
+**globaler** („Nightwatch-Kern" — Verarbeitung, Datenhaltung oder Alarm-Zustellung gestört). Erbt
+Zustandsmaschine und Alarm-Lebenszyklus vollständig: ein Alarm pro Übergang, ein offenes Ticket,
+Entwarnungs-Stabilität; ein erfolgreicher Poll ist **beweisbasierte Erholung**. Sonderstellung:
+wird außerhalb der normalen Alarm-Pipeline ausgewertet und gesendet — unabhängiger Absender,
+gleiche Empfänger —, ist nicht anlegbar, nicht löschbar, nicht pausierbar (Parameter ja, Existenz
+nein) und erscheint im Dashboard als System-Banner, nicht als Kunden-Karte. Gehört keinem Kunden;
+wohin sein Ticket geht, ist reine Transport-Konfiguration.
+
+**Wurzel-Unterdrückung**:
+Ist der globale Selbst-Monitor gestört, feuern die Postfach-Selbst-Monitore nicht zusätzlich —
+ein toter Kern macht zwangsläufig alle Postfächer still, das ist **ein** Befund, nicht viele.
+Dasselbe Prinzip wie das **Ingestion-Gate**, eine Ebene tiefer angewendet. Generell gilt:
+Symptome (Staleness) fangen jede Ursache, harte Ursachen (z. B. entzogener Zugriff) beschleunigen
+nur und liefern besseren Ticket-Text.
+
+**Heartbeat-Ping**:
+Ausgehendes Lebenszeichen (opt-in) an eine frei konfigurierbare URL des Betreibers — sein RMM,
+ein eigenes Monitoring, ein Dienst nach Wahl. Feuert **nur bei innerer Gesundheit**: eine
+degradierte Instanz verstummt, und der *Empfänger* schlägt an. Deckt als einziger Mechanismus den
+Totalausfall ab (Host/Netz down), den kein Prozess der Instanz selbst melden kann — Nightwatchs
+Dead-Man's-Switch-Prinzip, auf sich selbst angewendet. Keine Drittanbieter-Abhängigkeit: ohne
+konfigurierten Empfänger ist der Totalausfall schlicht unbeobachtet, und das Dashboard sagt das.
