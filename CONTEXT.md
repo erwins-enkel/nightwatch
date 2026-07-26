@@ -5,8 +5,8 @@ erwarteter Benachrichtigungsmails (Heartbeat) — plus klassische Fehler- und Er
 Dieses Glossar ist die verbindliche Sprache des Efforts (Deutsch).
 
 > Status: in Arbeit über Wayfinder-Map #1 (Domänenmodell #5, Kunden-Matching #6,
-> Regel-Entstehung #9). Begriffe mit „(vorläufig)" sind inhaltlich geklärt, aber der Name ist
-> noch nicht ratifiziert.
+> Regel-Entstehung #9, Alarm-Lebenszyklus #12). Begriffe mit „(vorläufig)" sind inhaltlich
+> geklärt, aber der Name ist noch nicht ratifiziert.
 
 ## Language
 
@@ -260,8 +260,50 @@ Das nach außen wirkende Signal beim Übergang gesund → gestört. Trägt einen
 
 **Entwarnung**:
 Das nach außen wirkende Signal beim Übergang gestört → gesund (Erholung). Erstklassiges Ereignis,
-kein stiller Wechsel: kann z. B. ein Autotask-Ticket kommentieren oder schließen.
+kein stiller Wechsel: kommentiert ein erzeugtes Ticket **immer** (mit Anlass, Störungsdauer und
+Vorkommens-Zusammenfassung), **schließt** es aber nur bei **beweisbasierter Erholung** und wenn
+noch niemand daran arbeitet. Nach außen wirkt sie erst nach der **Entwarnungs-Stabilität**.
 _Avoid_: Recovery-Mail (Entwarnung ist ein internes Signal, keine Mail).
+
+**Beweisbasierte Erholung**:
+Erholung, die eine eingetroffene Mail belegt: Heartbeat-OK, „Zu"-Mail des Paars, normalisierte
+Rate/Menge. Gegenstück zu Zeitablauf (**Auto-Zurück**) und Handgriff (**Erledigen**) — die sind
+kein Beweis. Nur beweisbasierte Erholung darf ein Ticket automatisch schließen; alles andere
+kommentiert nur. Ein nach Zeitablauf stillgelegtes Ereignis-Ticket darf nicht ungelesen zugehen.
+
+**Entwarnungs-Stabilität**:
+Stabilitätsfenster zwischen interner Erholung und Entwarnung nach außen (Größenordnung 15 Minuten,
+pro Monitor übersteuerbar). Der Alarm wirkt sofort — Alarme müssen schnell sein —, die Entwarnung
+wartet, bis die Erholung hält. Intern wechselt der Zustand sofort (Dashboard live). Ein flatternder
+Monitor hält so genau ein offenes Ticket statt einer Ticket-Serie.
+
+**Quittieren**:
+Dashboard-Marker „gesehen/in Arbeit" an einem aktiven Alarm. Ändert weder den Zustand noch wirkt
+es nach außen; erlischt mit der Erholung. Dahinter steht bewusst kein Reminder-System: es wird
+genau einmal pro Übergang alarmiert, die Eskalationsfläche ist das PSA-Ticket.
+_Avoid_: Acknowledge, Erledigen (das ist ein Zustandswechsel).
+
+**Erledigen**:
+Manuelle Erholung eines Ereignis-Monitors: der Mensch setzt gestört → gesund zurück, weil das
+Ereignis behandelt ist. Löst eine Entwarnung aus, ist aber keine beweisbasierte Erholung —
+kommentiert nur, schließt nie.
+_Avoid_: Quittieren (das ist nur ein Marker ohne Zustandswechsel).
+
+**Auto-Zurück**:
+Zeitbasierte Erholung eines Ereignis-Monitors: bleibt ein neues Vorkommen für eine eingestellte
+Zeit aus (Größenordnung 24 Stunden), kehrt er von selbst nach gesund zurück. Wie Erledigen keine
+beweisbasierte Erholung — kommentiert nur, schließt nie.
+
+**Verschärfung**:
+Wechsel des Alarmgrunds zu einem schwereren, während der Monitor gestört bleibt (unklar → Fehler
+gemeldet): aus „Regel prüfen" ist ein echter Vorfall geworden. Der einzige Anlass, zu dem ein
+offenes Ticket zwischendurch automatisch kommentiert wird — weitere Vorkommen desselben Grunds
+werden nur intern gezählt (Zähler, „zuletzt gesehen"), die Zusammenfassung kommt mit der Entwarnung.
+
+**Ingestion-Gate**:
+Zurückhalten aller Überfällig-Alarme, solange die Ingestion selbst nachweislich gestört ist (kein
+Polling, Auth-Fehler) — statt einer Flut falscher Kunden-Tickets feuert genau ein Selbst-Alarm.
+Stopft die größte Sturmquelle an der Wurzel. Mechanik → Self-Monitoring (#11).
 
 **Rückverweis**:
 Deep-Link, den jeder Alarm bzw. jedes erzeugte Ticket zurück ins Nightwatch-UI trägt — direkt zum
