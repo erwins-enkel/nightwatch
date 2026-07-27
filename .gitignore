@@ -1,7 +1,24 @@
 node_modules/
 .DS_Store
+Thumbs.db
 *.log
+
+# Output
+/.svelte-kit
+/build
+dist/
+
+# Env
 .env
 .env.*
-dist/
-build/
+!.env.example
+
+# Vite
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# Paraglide compiles into the source tree
+/src/lib/paraglide
+
+# Shepherd session-local
+/.shepherd-preview
