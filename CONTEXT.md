@@ -5,8 +5,8 @@ erwarteter Benachrichtigungsmails (Heartbeat) — plus klassische Fehler- und Er
 Dieses Glossar ist die verbindliche Sprache des Efforts (Deutsch).
 
 > Status: in Arbeit über Wayfinder-Map #1 (Domänenmodell #5, Kunden-Matching #6,
-> Regel-Entstehung #9, Alarm-Lebenszyklus #12, Self-Monitoring #11). Begriffe mit „(vorläufig)"
-> sind inhaltlich geklärt, aber der Name ist noch nicht ratifiziert.
+> Regel-Entstehung #9, Alarm-Lebenszyklus #12, Self-Monitoring #11, Parametrisierung #15).
+> Begriffe mit „(vorläufig)" sind inhaltlich geklärt, aber der Name ist noch nicht ratifiziert.
 
 ## Language
 
@@ -22,7 +22,8 @@ _Avoid_: Wächter, Überwachung, Check.
 **Monitor-Art**:
 Der Charakter eines Monitors. Ein **offenes, erweiterbares Set** (nicht zwei feste Fälle) —
 neue Arten kommen später hinzu, ohne die Zustandsmaschine zu ändern. Jede Art erfüllt denselben
-**Dreiklang-Vertrag**.
+**Dreiklang-Vertrag** und deutet die **Muster-Slots** der Regel auf ihre Weise. Das v1-Set:
+**Heartbeat · Ereignis · Paar · Zähler**.
 
 **Dreiklang-Vertrag**:
 Der gemeinsame Vertrag jeder Monitor-Art, definiert durch drei Fragen:
@@ -32,30 +33,53 @@ Der gemeinsame Vertrag jeder Monitor-Art, definiert durch drei Fragen:
 
 **Heartbeat-Monitor**:
 Erwartet Mails in Regelmäßigkeit. Schlecht, wenn die erwartete Mail **ausbleibt** (überfällig)
-**oder** eine eingetroffene Mail als Fehler klassifiziert wird. Beispiel: nächtlicher Backup-Report.
+**oder** eine eingetroffene Mail als Fehler klassifiziert wird. Pünktlichkeit und Inhalt sind
+zwei getrennte Dimensionen: **jede passende Mail** (OK, Fehler oder Unklar) erfüllt die
+**Erwartung** — sie beweist, dass der Meldekanal lebt —, die **Klassifikation** bestimmt separat
+den Zustand. Überfällig heißt exakt: es kam **gar nichts**, nicht „nichts Gutes". Beispiel:
+nächtlicher Backup-Report.
 
 **Ereignis-Monitor**:
 Mails kommen nur im Störungsfall und haben **kein** natürliches Gegenstück. Schlecht, sobald eine
-passende Mail **kommt**. Beispiel: „Firmware-Update verfügbar".
+passende Mail **kommt** — die Ankunft selbst ist das Ereignis, ein Fehler-Muster braucht diese Art
+nicht. Der optionale **Harmlos-Filter** nimmt unkritische Geschwister-Mails vom Auslösen aus.
+Grenze zur Nachbar-Art: gibt es eine echte Entwarnungs-Mail, ist es per Definition ein
+**Paar-Monitor**. Beispiel: „Firmware-Update verfügbar".
 
 **Paar-Monitor** _(auch: Zustands-Monitor)_:
-Verfolgt einen **offenen Zustand** aus paarweisen Mails: eine „Auf"-Mail öffnet, eine „Zu"-Mail
-schließt. Schlecht, wenn zu lange offen; erholt mit der „Zu"-Mail. Beispiel: Router „Leitung ab" …
-„Leitung wieder da"; Job „gestartet" … „beendet".
+Verfolgt einen **offenen Zustand** aus paarweisen Mails: das **Auf-Muster** öffnet („Leitung ab",
+„Job gestartet"), das **Zu-Muster** schließt — die beweisbasierte Erholung. Schlecht, wenn länger
+offen als die **maximale Offenzeit** (Default 0 = sofort alarmieren; für Jobs die erlaubte
+Laufzeit; Kurz-Flattern dämpft die Entwarnungs-Stabilität). Ränder: eine Zu-Mail ohne offenen
+Zustand ist **neutral** (kein Alarm, kein Unklar, nur „zuletzt gesehen"); ein zweites Auf während
+offen zählt als internes Vorkommen, die Offenzeit läuft ab dem **ersten** Auf. Ein Monitor führt
+genau **einen** offenen Zustand — parallele Instanzen (mehrere gleichzeitige Jobs) sind getrennte
+Monitore, keine Instanz-Korrelation. Beispiel: Router „Leitung ab" … „Leitung wieder da".
 
-**Schwellwert-Monitor** _(auch: Raten-Monitor)_:
-Schlecht, wenn mehr als N passende Mails in Zeitfenster T eintreffen (Meldungssturm, Flapping);
-erholt, wenn die Rate sich normalisiert.
+**Zähl-Monitor** _(vereint die früheren Schwellwert-/Raten- und Volumen-/Abweichungs-Monitore)_:
+Zählt passende Mails in einem **gleitenden Fenster** T (Minuten bis Tage); die Muster-Slots sind
+bei dieser Art ungenutzt. Schlecht, sobald der Zähler die **Obergrenze** überschreitet
+(Meldungssturm — feuert sofort mit der Mail, die sie reißt) oder die **Untergrenze** unterschreitet
+(Verstummen — feuert, sobald genug Mails herausgealtert sind, kein Warten aufs Tagesende);
+mindestens eine Grenze ist gesetzt. Erholt beweisbasiert, wenn der Zähler wieder im Band liegt.
+Der „erlernte Normalwert" ist **Vorbefüllung** der Grenzen aus dem Lernfenster, keine
+Laufzeit-Baseline. Beispiele: „mehr als 50 in 10 Minuten" · „normal ~100 OK/Tag, heute nur 3".
 
-**Volumen-Monitor** _(auch: Abweichungs-Monitor)_:
-Schlecht, wenn die Mail-Menge stark vom erlernten Normalwert abweicht; erholt im Normalbereich.
-Beispiel: „normal ~100 OK/Tag, heute nur 3".
+**Anlauf**:
+Schonzeit der Zähler-**Untergrenze**: sie wird erst scharf, wenn seit der Aktivierung — oder seit
+dem Ende eines **Ausnahmetags** — ein volles Fenster T vergangen ist. Ohne Anlauf wäre jeder
+frisch aktivierte Zähl-Monitor sofort gestört, denn der Zähler startet bei 0 und Historie wird
+nie rückwirkend gewertet. Die **Obergrenze** gilt dagegen ab Sekunde 1.
 
 ### Erwartung (Heartbeat)
 
 **Erwartung**:
 Die Soll-Definition eines Heartbeat-Monitors, wann eine Mail eintreffen muss. Zwei Ausprägungen:
-**Intervall** oder **Kalenderplan**. Immer mit **Karenz**.
+**Intervall** oder **Kalenderplan**. Immer mit **Karenz**. Erfüllt wird sie von **jeder passenden
+Mail**, unabhängig von deren Klassifikation. Beim Kalenderplan gilt ein Soll-Zeitpunkt als
+abgedeckt, wenn seit dem vorherigen **wirksamen** Soll eine passende Mail eintraf — der
+Backup-Report von 23:40 deckt das „bis 06:00"-Soll des Folgetages (Jobs laufen oft früher als
+die Deadline).
 
 **Intervall**:
 Gleitendes „spätestens alle X". Die Uhr startet bei jeder eingetroffenen Mail neu; kennt keine
@@ -67,11 +91,17 @@ deckt Wochenenden ohne Zusatzkonzept mit ab. Für geplante Jobs (Backups, Report
 
 **Karenz** _(Toleranzfenster)_:
 Puffer nach dem Soll-Zeitpunkt, bevor `Gestört` mit Grund „überfällig" ausgelöst wird. Kein
-eigener Zustand — Teil der Schlecht-Bedingung.
+eigener Zustand — Teil der Schlecht-Bedingung. Bleibt ein reiner **Heartbeat**-Begriff: Zähler
+und Paar haben ihre eigenen Zeitparameter (Fenster, Offenzeit), keine zweite Karenz daneben.
 
 **Ausnahmetag**:
-Ein manuell gesetztes Datum, an dem eine Kalenderplan-Erwartung ausgesetzt ist (kein „überfällig").
-Deckt Feiertage ab, solange kein automatischer Feiertagskalender existiert (Folgeversion). Kann als
+Ein manuell gesetztes Datum, an dem die **Zeit-Solls** ausgesetzt sind — und nur die:
+Kalenderplan-Soll-Zeitpunkte entfallen (kein „überfällig"; das Abdeckungs-Fenster des nächsten
+Solls reicht bis zum letzten wirksamen Soll zurück), und die **Untergrenze** des Zähl-Monitors
+wird nicht gewertet („normal 100/Tag, am Feiertag 0" darf nicht alarmieren; danach greift der
+**Anlauf**). Die Obergrenze bleibt scharf — ein Meldungssturm am Feiertag ist erst recht ein
+Befund. Intervall, Ereignis und Paar sind unberührt; für die gibt es **Pausiert**. Deckt
+Feiertage ab, solange kein automatischer Feiertagskalender existiert (Folgeversion). Kann als
 benannter, wiederverwendbarer Ausnahmekalender gebündelt werden.
 
 ### Kunde & Zuordnung
@@ -152,6 +182,20 @@ Die Merkmale, mit denen ein Monitor „seine" Mails erkennt: Absender, Betreff-M
 Wirken erst **nach** der Kunden-Zuordnung, nur innerhalb der Monitore des erkannten Kunden — die
 Unterscheidung der Kunden ist Sache der **Zuordnungs-Merkmale**, nicht der Match-Kriterien.
 
+**Muster-Slots**:
+Die zwei generischen Muster-Felder jeder Regel — ein Schlecht- und ein Gut-Signal —, die jede
+**Monitor-Art** auf ihre Weise deutet: Heartbeat **Fehler-/OK-Muster** (Klassifikation), Ereignis
+**— / Harmlos-Filter**, Paar **Auf-/Zu-Muster**; der Zähler nutzt sie nicht. Eine Struktur, vier
+Lesarten — der Wizard beschriftet die Felder je Art um, der Klassifikator-Steckplatz sitzt an
+einer Stelle. Eine passende Mail, die keinen Slot trifft, ist **Unklar** (Ausnahme: die Zu-Mail
+ohne offenen Zustand beim Paar ist neutral).
+
+**Harmlos-Filter**:
+Der Gut-Slot des **Ereignis-Monitors**: ein optionales Muster, das passende, aber unkritische
+Mails vom Auslösen ausnimmt („Update erfolgreich installiert" neben „Update verfügbar" vom selben
+Absender). Eine harmlose Mail löst nicht aus, **erholt aber auch nicht** — sie ist kein
+Gegenstück; gäbe es eins, wäre es ein **Paar-Monitor**.
+
 **Klassifikation**:
 Dreiwertige Beurteilung einer zugeordneten Mail: **OK** (OK-Muster trifft) / **Fehler** (Fehler-Muster
 trifft, hat **Vorrang**) / **Unklar** (keins trifft).
@@ -189,7 +233,14 @@ nur die Startrampe — alle drei münden in dieselbe Anlage-Fläche und untersch
 Wie viel die **Regel-Quelle** in die Anlage-Fläche schreibt, bevor der Mensch bestätigt: nichts
 (manuell) · Art + Erkennung + Parameter-Defaults (Vorlage) · Erkennung + Art-Vermutung + Takt
 (aus Mail). Ein Begriff statt dreier getrennter Anlage-Wege — ein mentales Modell, ein
-Bestätigungs-Gate, und der Klassifikator-Steckplatz sitzt an genau einer Stelle.
+Bestätigungs-Gate, und der Klassifikator-Steckplatz sitzt an genau einer Stelle. Leitsatz der
+Ableitung: **Schicht 1 befüllt Zeitliches und Strukturelles, nie Inhaltliches** — Match-Kriterien,
+Takt → Erwartung, Karenz aus der beobachteten Streuung, Zähler-Fenster und -Grenzen aus der
+Lernfenster-Statistik, Paar-Offenzeit nachgelagert aus beobachteten Auf→Zu-Dauern (sobald die
+Muster markiert sind). Als Art vermutet die Automatik nur **Heartbeat** (Takt erkannt) oder
+**Ereignis** (kein Takt) — Paar und Zähler wählt der Mensch bewusst. Muster (Schicht 2),
+Auto-Zurück-Zeit und die finale Bestätigung sind immer Menschensache; jeder Vorschlag trägt
+seinen **Beleg**.
 
 **Lernfenster** _(Backfill)_:
 Der begrenzte Vorrat vergangener Mails, den Nightwatch beim Verbinden eines Postfachs einmalig zieht
@@ -201,6 +252,18 @@ Tag 1 zahnlos. Es gilt strikt:
 Ein Monitor wertet ausschließlich **ab seiner Aktivierung vorwärts**, nie rückwirkend. Kein Alarm
 und kein Ticket für eine Lücke, die vor der Anlage lag — sonst wäre jedes frisch verbundene Postfach
 eine Ticket-Lawine.
+
+**Takt** _(Rhythmus)_:
+Der erkannte Eingangs-Rhythmus einer Mail-Sorte. Gilt als **erkannt** ab **3 Vorkommen** im
+Lernfenster, wenn die Streuung der Abstände höchstens ~25 % des Median-Abstands beträgt
+(absoluter Boden 15 Minuten, damit „alle 5 min ± 2 min" nicht durchfällt). Es gibt genau **eine**
+Schwelle: „**wiederkehrend**" (das Listungs-Kriterium der unüberwachten Mail-Sorten) und die
+Takt-Vorbefüllung meinen dieselbe — Schwelle 3 statt 5, weil wöchentliche Reports im
+~30-Tage-Lernfenster sonst nie erkannt würden. Takt-Klassen: **Intervall** („alle ~X") ·
+**täglich** ~HH:MM · **werktäglich** ~HH:MM (systematische Wochenend-Lücke) · **wöchentlich** am
+Wochentag ~HH:MM. **Monatlich bewusst nicht** — das Lernfenster gibt keine 3 Vorkommen her;
+Monats-Reports legt der Mensch als Kalenderplan an. Ein Takt-Vorschlag erscheint immer **mit
+Beleg** („werktäglich ~05:40, aus 12 Vorkommen").
 
 **Unüberwachte Mail-Sorte**:
 Eine wiederkehrende Mail-Sorte eines bekannten Kunden, für die es noch keinen Monitor gibt —
@@ -245,7 +308,9 @@ unterschiedlichem Alarmgrund. „Alarmiert" und „erholt" sind **Übergänge**,
 
 **Alarmgrund**:
 Der Grund für den Übergang nach `Gestört`: überfällig / Fehler gemeldet / unklar (nicht
-klassifizierbar) / Ereignis eingetroffen / Rate überschritten / Paar zu lange offen.
+klassifizierbar) / Ereignis eingetroffen / Paar zu lange offen / Zähler über Obergrenze /
+Zähler unter Untergrenze. Der Monitor trägt stets den **aktuellen** Grund (Dashboard live);
+Grund-Wechsel während `Gestört` → **Verschärfung**.
 
 **Pausiert**:
 Eine Überlagerung der 2-Zustands-Maschine (orthogonal: aktiv/pausiert) für geplante Wartung.
@@ -256,7 +321,8 @@ Dashboard sichtbar verschieden von „aus" und von `Gestört`.
 
 **Alarm**:
 Das nach außen wirkende Signal beim Übergang gesund → gestört. Trägt einen **Alarmgrund**
-(überfällig / Fehler gemeldet / Ereignis eingetroffen / Rate überschritten / Paar zu lange offen).
+(überfällig / Fehler gemeldet / unklar / Ereignis eingetroffen / Paar zu lange offen / Zähler
+über Obergrenze / Zähler unter Untergrenze).
 
 **Entwarnung**:
 Das nach außen wirkende Signal beim Übergang gestört → gesund (Erholung). Erstklassiges Ereignis,
@@ -295,10 +361,12 @@ Zeit aus (Größenordnung 24 Stunden), kehrt er von selbst nach gesund zurück. 
 beweisbasierte Erholung — kommentiert nur, schließt nie.
 
 **Verschärfung**:
-Wechsel des Alarmgrunds zu einem schwereren, während der Monitor gestört bleibt (unklar → Fehler
-gemeldet): aus „Regel prüfen" ist ein echter Vorfall geworden. Der einzige Anlass, zu dem ein
-offenes Ticket zwischendurch automatisch kommentiert wird — weitere Vorkommen desselben Grunds
-werden nur intern gezählt (Zähler, „zuletzt gesehen"), die Zusammenfassung kommt mit der Entwarnung.
+Wechsel des Alarmgrunds **zu „Fehler gemeldet"**, während der Monitor gestört bleibt:
+unklar → Fehler („aus Regel prüfen ist ein echter Vorfall geworden") ebenso wie
+überfällig → Fehler („jetzt wissen wir, warum nichts kam"). Der einzige Anlass, zu dem ein
+offenes Ticket zwischendurch automatisch kommentiert wird — alle anderen Grund-Wechsel (etwa
+Fehler → überfällig: nach Fehlermails verstummt) und weitere Vorkommen desselben Grunds werden
+nur intern gezählt (Zähler, „zuletzt gesehen"), die Zusammenfassung kommt mit der Entwarnung.
 
 **Ingestion-Gate**:
 Aussetzen (nicht Verwerfen) der Überfällig-Entscheidungen, solange die Ingestion selbst
