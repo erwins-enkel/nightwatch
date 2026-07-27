@@ -17,8 +17,12 @@ dist/
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
-# Paraglide compiles into the source tree
+# Paraglide compiles into the source tree, and writes cache/metadata next to its settings.
+# Spelled out here rather than relying on the .gitignore Paraglide drops into project.inlang/,
+# because that file ignores itself and so never reaches a fresh clone.
 /src/lib/paraglide
+/project.inlang/*
+!/project.inlang/settings.json
 
 # Shepherd session-local
 /.shepherd-preview
