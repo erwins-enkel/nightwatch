@@ -377,6 +377,7 @@ truth for product and architecture decisions.
 │   ├── worker/                     # Worker entrypoint — Bun runs it straight from source
 │   └── watchdog/                   # Watchdog entrypoint
 └── docs/
+    ├── datenmodell.md               # Entities, invariants and the decisions behind them
     └── research/
         ├── m365-graph-ingestion.md # Ingestion: Graph delta-query, app model, scoping, self-monitoring
         ├── autotask-api.md         # Autotask PSA ticket creation, de-dup, retry queue
