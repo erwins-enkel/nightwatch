@@ -189,6 +189,49 @@ and are ruled out for the on-prem case.
 Full rationale, PowerShell onboarding snippets, and error-handling details are in
 [`docs/research/m365-graph-ingestion.md`](docs/research/m365-graph-ingestion.md).
 
+### Connecting a mailbox
+
+Set `NIGHTWATCH_SECRET_KEY` in your `.env` first — it encrypts every credential Nightwatch
+stores (AES-256-GCM). The stack boots without it, but connecting a mailbox will fail:
+
+```sh
+openssl rand -base64 32
+```
+
+Then open **Settings → Mailboxes** (`/einstellungen/postfaecher`) and enter the customer's
+tenant ID, your app registration's client ID and secret, and the mailbox address. The page then
+shows the two things you hand to the customer's administrator:
+
+1. an **admin consent link** for that tenant, and
+2. a **PowerShell snippet** that scopes `Mail.Read` down to this one mailbox via RBAC for
+   Applications in Exchange Online.
+
+Register the redirect URI the page displays (`<your origin>/einstellungen/postfaecher/consent`)
+in your app registration first — Microsoft Entra ID matches it character for character.
+
+> **Do the scoping step.** Application `Mail.Read` is tenant-wide by default, so consent alone
+> lets Nightwatch read *every* mailbox in the customer tenant. Note also that RBAC grants are
+> **additive** to Entra grants: if the same app additionally holds an organisation-wide
+> `Mail.Read` in Entra ID, that silently defeats the scope. Permission changes take 30 minutes
+> to 2 hours to propagate.
+
+### Learning window
+
+Connecting a mailbox pulls a one-off backfill of past mail — 30 days by default, configurable
+per mailbox. It feeds mail search, Takt recognition and rule derivation, and is marked as such
+in the database: **history is learning material, never monitoring material.** Monitors only
+ever evaluate forward from their own activation, so a freshly connected mailbox never produces
+a burst of tickets for gaps that predate it.
+
+### Ingestion status
+
+Every mailbox records its last successful poll, its last error code, and how close its
+credential is to expiring — visible on the same settings page. Throttling (`429`/`503`) is
+honoured via `Retry-After`, an expired delta token (`410 Gone`) triggers an automatic resync,
+and repeated failures back off exponentially up to 15 minutes. Turning that status into an
+alarm is the job of the mailbox **self-monitor**, which arrives with the self-monitoring
+milestone.
+
 ---
 
 ## Architecture & tech stack
@@ -372,8 +415,10 @@ truth for product and architecture decisions.
 ├── drizzle/                        # Generated SQL migrations
 ├── messages/                       # Paraglide message catalogues (en, de)
 ├── src/
-│   ├── routes/                     # SvelteKit dashboard, plus /health
+│   ├── routes/                     # SvelteKit dashboard, mailbox settings, /health
 │   ├── lib/server/                 # Shared server code (env, logger, db, heartbeat, watchdog)
+│   │   ├── graph/                  # Microsoft Graph: MSAL tokens, delta calls, error classes
+│   │   └── ingestion/              # Delta poll loop, backoff, mailbox persistence
 │   ├── worker/                     # Worker entrypoint — Bun runs it straight from source
 │   └── watchdog/                   # Watchdog entrypoint
 └── docs/
