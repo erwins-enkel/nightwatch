@@ -41,7 +41,13 @@ export default defineConfig({
 					name: 'server',
 					environment: 'node',
 					include: ['src/**/*.{test,spec}.{js,ts}'],
-					exclude: ['src/**/*.svelte.{test,spec}.{js,ts}']
+					exclude: ['src/**/*.svelte.{test,spec}.{js,ts}'],
+					// The database-backed suites share one Postgres — CI provides a single throwaway
+					// instance — and the ingestion tests have to commit rather than roll back, because
+					// what they assert *is* the commit (claiming a row, conflict handling). Two files
+					// doing that at once collide. The whole suite runs in well under a second, so
+					// serialising files costs nothing and removes the flake at its source.
+					fileParallelism: false
 				}
 			}
 		]
