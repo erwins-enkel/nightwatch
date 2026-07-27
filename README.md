@@ -235,12 +235,73 @@ processes give better observability and self-healing.
 - A socket-based active force-restart (for the rare total hang) is opt-in behind a
   socket-proxy and is **not** in v1.
 
+> **Compose healthchecks do not restart anything.** Docker only restarts a container that
+> *exits*; an `unhealthy` one is left alone (that is a Swarm feature). The healthchecks in
+> `docker-compose.yml` exist to order startup via `depends_on` and to make `docker compose ps`
+> tell the truth. Self-healing comes from the in-process watchdog exiting plus
+> `restart: unless-stopped` — nothing else.
+
+---
+
+## Running it
+
+The stack runs from the repository root. Everything below works today; what it *does* so far
+is come up, report its own health and serve a placeholder page — the monitoring itself is
+being built out issue by issue (see the roadmap).
+
+### With Docker Compose
+
+```bash
+cp .env.example .env       # then edit POSTGRES_PASSWORD at least
+docker compose up -d --build
+curl localhost:3000/health
+```
+
+`web`, `worker` and `watchdog` all run from the **same image**, distinguished only by their
+command — one tag to pull, one image to harden. Startup is ordered `postgres` (healthy) →
+`web` → `worker` + `watchdog`: `web` applies the database migrations before it starts
+serving, so it is the only migrator and no locking is needed.
+
+`GET /health` is passive — it reports, it never acts, and it is safe to poll as often as you
+like. It answers `200`/`ok` when the web service can reach the database, and `503`/`degraded`
+when it cannot. The heartbeat freshness of the other services is reported in the body but
+deliberately does not affect the status code: `worker` and `watchdog` wait for `web` to be
+healthy, so folding their heartbeats into it would deadlock a cold start.
+
+### For development
+
+```bash
+bun install
+docker compose up -d postgres
+
+# Point host-side processes at the published Postgres port. Put this in .env.local, not .env:
+# Bun reads .env.local and Compose does not, so the containers keep using the `postgres` host.
+echo 'DATABASE_URL=postgres://nightwatch:change-me@localhost:5432/nightwatch' > .env.local
+
+bun run db:migrate
+bun run dev            # dashboard on http://localhost:5175
+bun run dev:worker     # in a second terminal
+bun run dev:watchdog   # in a third
+```
+
+| Command | What it does |
+| --- | --- |
+| `bun run lint` | Prettier check plus ESLint |
+| `bun run check` | Compiles the Paraglide messages, then `svelte-check` |
+| `bun run test` | Vitest unit tests |
+| `bun run db:generate` | Generates a migration from the Drizzle schema |
+
+**One rule for shared server code:** anything under `src/lib/server/` is imported both by
+SvelteKit *and* by the worker/watchdog entrypoints, which Bun runs on their own. It must
+therefore read `process.env` and never import `$env/*` or `$app/*` — those only exist inside a
+SvelteKit build.
+
 ---
 
 ## Planned deployment
 
-> The commands and channels below describe the **intended** deployment once v1 is built.
-> They do not work yet — there is no published image or Compose file in this repository.
+> The Compose file and `.env.example` below exist and work. The published image, the Portainer
+> template and the DO Marketplace channel do not exist yet.
 
 Distribution is staged (details in
 [`docs/research/distribution-updates.md`](docs/research/distribution-updates.md)):
@@ -301,7 +362,20 @@ truth for product and architecture decisions.
 ```
 .
 ├── CLAUDE.md                       # Project concept and working notes
+├── SPEC.md                         # Build-ready specification for v1
+├── CONTEXT.md                      # Binding domain glossary
 ├── README.md                       # This file
+├── docker-compose.yml              # The four services — single source of truth for deployment
+├── .env.example                    # Copy to .env
+├── Dockerfile                      # One image, three roles
+├── docker/entrypoint.sh            # Role dispatch: web | worker | watchdog | migrate
+├── drizzle/                        # Generated SQL migrations
+├── messages/                       # Paraglide message catalogues (en, de)
+├── src/
+│   ├── routes/                     # SvelteKit dashboard, plus /health
+│   ├── lib/server/                 # Shared server code (env, logger, db, heartbeat, watchdog)
+│   ├── worker/                     # Worker entrypoint — Bun runs it straight from source
+│   └── watchdog/                   # Watchdog entrypoint
 └── docs/
     └── research/
         ├── m365-graph-ingestion.md # Ingestion: Graph delta-query, app model, scoping, self-monitoring
@@ -309,8 +383,8 @@ truth for product and architecture decisions.
         └── distribution-updates.md # Compose → Portainer → DO Marketplace, update mechanic
 ```
 
-The GitHub issues are the living design record; a consolidated `SPEC.md` will follow from
-[#10](https://github.com/erwins-enkel/nightwatch/issues/10).
+The GitHub issues are the living design record; [`SPEC.md`](SPEC.md) consolidates the
+decisions and [`CONTEXT.md`](CONTEXT.md) is the binding glossary.
 
 ## Scope
 

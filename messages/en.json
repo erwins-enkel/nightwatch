@@ -1,0 +1,7 @@
+{
+	"$schema": "https://inlang.com/schema/inlang-message-format",
+	"tagline": "Watches your mailboxes — and notices the mail that never arrives.",
+	"scaffold_notice": "This is the v1 scaffold: the four services are wired up, the dashboard follows with the UI milestone.",
+	"health_link": "Health endpoint",
+	"language": "Language"
+}
