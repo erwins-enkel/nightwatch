@@ -19,7 +19,15 @@
 	<p class="text-lg text-slate-300">{m.tagline()}</p>
 	<p class="text-sm text-slate-400">{m.scaffold_notice()}</p>
 
-	<a href={resolve('/health')} class="text-sm text-emerald-400 underline underline-offset-4">
-		{m.health_link()}
-	</a>
+	<nav class="flex flex-col gap-2 text-sm">
+		<a
+			href={resolve('/einstellungen/postfaecher')}
+			class="w-fit text-emerald-400 underline underline-offset-4"
+		>
+			{m.settings_mailboxes_link()}
+		</a>
+		<a href={resolve('/health')} class="w-fit text-emerald-400 underline underline-offset-4">
+			{m.health_link()}
+		</a>
+	</nav>
 </main>
