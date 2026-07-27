@@ -13,5 +13,3 @@ export const heartbeat = pgTable('heartbeat', {
 	version: text('version').notNull(),
 	pid: integer('pid').notNull()
 });
-
-export type Heartbeat = typeof heartbeat.$inferSelect;

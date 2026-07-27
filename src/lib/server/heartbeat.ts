@@ -8,7 +8,7 @@ export interface HeartbeatOptions {
 	write: () => Promise<void>;
 	/**
 	 * Runs synchronously at the start of every tick, before the write — this is where a service
-	 * pets its watchdog timer. Deliberately independent of whether the write succeeds: a
+	 * pets its watchdog timer. Deliberately independent of whether the write succeeds: an
 	 * unreachable database says nothing about whether *this* process is still alive.
 	 */
 	onTick?: () => void;

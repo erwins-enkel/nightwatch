@@ -13,7 +13,7 @@ import * as schema from './schema';
  */
 let poolInstance: pg.Pool | undefined;
 
-export function getPool(): pg.Pool {
+function getPool(): pg.Pool {
 	return (poolInstance ??= new pg.Pool({ connectionString: requireDatabaseUrl() }));
 }
 
@@ -40,5 +40,3 @@ export async function closePool(): Promise<void> {
 	dbInstance = undefined;
 	await pool.end();
 }
-
-export type Database = ReturnType<typeof getDb>;
