@@ -1,0 +1,7 @@
+{
+	"$schema": "https://inlang.com/schema/inlang-message-format",
+	"tagline": "Überwacht eure Postfächer — und bemerkt die Mail, die nicht mehr kommt.",
+	"scaffold_notice": "Dies ist das v1-Grundgerüst: die vier Services stehen, das Dashboard folgt mit dem UI-Meilenstein.",
+	"health_link": "Health-Endpoint",
+	"language": "Sprache"
+}

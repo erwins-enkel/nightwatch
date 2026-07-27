@@ -7,3 +7,15 @@ bun.lockb
 
 # Miscellaneous
 /static/
+
+# Prose: SPEC.md, CONTEXT.md and the research docs are hand-wrapped documents. Letting Prettier
+# reflow them would bury every real change in formatting noise.
+*.md
+
+# Generated
+/drizzle/meta/
+/src/lib/paraglide/
+/project.inlang/.meta.json
+
+# Shepherd session-local
+/.shepherd-plan-blocks.json
