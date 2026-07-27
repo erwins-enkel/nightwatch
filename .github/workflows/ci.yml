@@ -13,6 +13,27 @@ jobs:
   check:
     name: Lint, typecheck, tests
     runs-on: ubuntu-latest
+
+    # The data model's invariants (CHECK constraints, partial unique indexes) can only be tested
+    # by a database that enforces them, so the test job gets a throwaway one.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: nightwatch
+          POSTGRES_PASSWORD: nightwatch
+          POSTGRES_DB: nightwatch
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nightwatch -d nightwatch"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      DATABASE_URL: postgres://nightwatch:nightwatch@127.0.0.1:5432/nightwatch
+
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
@@ -22,6 +43,20 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run lint
       - run: bun run check
+
+      # Catches the classic slip: schema edited, migration forgotten. Diffs against the committed
+      # snapshots, so it needs no database. `git status` rather than `git diff` because a
+      # forgotten migration shows up as an *untracked* file, which `git diff` would not see.
+      - name: Migrations are in sync with the schema
+        run: |
+          bun run db:check
+          bun run db:generate
+          if [ -n "$(git status --porcelain drizzle/)" ]; then
+            echo "drizzle/ changed — run 'bun run db:generate' and commit the result:"
+            git status --porcelain drizzle/
+            exit 1
+          fi
+
       - run: bun run test
 
   image:
@@ -74,11 +109,33 @@ jobs:
           echo "pgboss.version rows: $count"
           [ "$count" -ge 1 ]
 
-      - name: Migrations created the heartbeat table
+      # Migrate-on-startup is what an operator actually experiences, so the smoke test asserts the
+      # whole data model landed — not just that migrations ran at all.
+      - name: Migrations created every core table
         run: |
-          docker compose exec -T postgres \
-            psql -U nightwatch -d nightwatch -tAc "select to_regclass('public.heartbeat')" \
-            | grep -q heartbeat
+          for table in postfach kunde zuordnungs_merkmal monitor regel regel_vorlage mail \
+            mail_sorte uebergang ticket_korrelation webhook_ziel zustellung ausnahmekalender \
+            ausnahmetag monitor_ausnahmekalender selbst_monitor einstellungen heartbeat; do
+            result=$(docker compose exec -T postgres \
+              psql -U nightwatch -d nightwatch -tAc "select to_regclass('public.$table')")
+            echo "$table: ${result:-missing}"
+            if [ "$result" != "$table" ]; then
+              echo "expected table $table to exist"
+              exit 1
+            fi
+          done
+
+      - name: Seeds are in place
+        run: |
+          kern=$(docker compose exec -T postgres psql -U nightwatch -d nightwatch -tAc \
+            "select bezeichnung from selbst_monitor where schluessel = 'kern'")
+          echo "global self-monitor: ${kern:-missing}"
+          [ "$kern" = "Nightwatch-Kern" ]
+
+          retention=$(docker compose exec -T postgres psql -U nightwatch -d nightwatch -tAc \
+            "select retention_tage from einstellungen where id = 1")
+          echo "retention days: ${retention:-missing}"
+          [ "$retention" = "90" ]
 
       # SPEC §12: non-root containers, and no Docker socket anywhere in the stack.
       - name: Containers are hardened
