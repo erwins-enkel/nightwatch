@@ -140,6 +140,18 @@ export const mail = pgTable(
 		/** The triage list is a small slice of a large table. */
 		index('mail_triage_grund_idx')
 			.on(t.triageGrund)
-			.where(sql`triage_grund is not null`)
+			.where(sql`triage_grund is not null`),
+		/**
+		 * The assignment pipeline's claim (#24): "which mails are still unprocessed?", oldest first.
+		 *
+		 * Partial on purpose. `verarbeitet_am` is null only while a mail waits for the pipeline, so
+		 * this index holds the *backlog* and is near-empty in steady state — while an unindexed claim
+		 * would sequential-scan the largest table in the schema on every tick, forever, to find
+		 * nothing. Oldest-first is the order the pipeline needs anyway: `mail_sorte.erster_eingang`
+		 * and the Takt statistics (#32) are only meaningful if arrival order is preserved.
+		 */
+		index('mail_unverarbeitet_idx')
+			.on(t.ankunftszeit)
+			.where(sql`verarbeitet_am is null`)
 	]
 );
