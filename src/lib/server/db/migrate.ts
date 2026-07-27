@@ -7,8 +7,7 @@
  * and therefore have no Compose healthcheck gating the start.
  */
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
-import { closePool, getDb } from './client';
-import { pingDatabase } from './heartbeat';
+import { closePool, getDb, pingDatabase } from './client';
 import { createLogger, describeError } from '../logger';
 
 const MAX_WAIT_MS = 60_000;

@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
 import { requireDatabaseUrl } from '../env';
@@ -24,6 +25,11 @@ function createDb(pool: pg.Pool) {
 
 export function getDb(): ReturnType<typeof createDb> {
 	return (dbInstance ??= createDb(getPool()));
+}
+
+/** Throws if Postgres is unreachable; callers decide how loud that is. */
+export async function pingDatabase(): Promise<void> {
+	await getDb().execute(sql`select 1`);
 }
 
 /** No-op if nothing ever connected, so shutdown paths can call it unconditionally. */

@@ -8,14 +8,18 @@
 
 name: nightwatch
 
+x-app-env: &app-env
+  # Derived from the POSTGRES_* values, so changing the password in .env is enough. Set
+  # DATABASE_URL in .env only to point the stack at your own Postgres instead.
+  DATABASE_URL: '${DATABASE_URL:-postgres://${POSTGRES_USER:-nightwatch}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-nightwatch}}'
+  HEARTBEAT_INTERVAL_SECONDS: ${HEARTBEAT_INTERVAL_SECONDS:-15}
+  WATCHDOG_TIMEOUT_SECONDS: ${WATCHDOG_TIMEOUT_SECONDS:-90}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+
 x-app: &app
   image: ghcr.io/erwins-enkel/nightwatch:${NIGHTWATCH_VERSION:-latest}
   restart: unless-stopped
-  environment:
-    DATABASE_URL: ${DATABASE_URL}
-    HEARTBEAT_INTERVAL_SECONDS: ${HEARTBEAT_INTERVAL_SECONDS:-15}
-    WATCHDOG_TIMEOUT_SECONDS: ${WATCHDOG_TIMEOUT_SECONDS:-90}
-    LOG_LEVEL: ${LOG_LEVEL:-info}
+  environment: *app-env
 
 services:
   postgres:
@@ -26,7 +30,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: ${POSTGRES_DB:-nightwatch}
     ports:
-      # Loopback only, so local development can reach it. Remove in production — nothing
+      # Loopback only, so host-side development can reach it. Remove in production — nothing
       # outside the Compose network needs the database.
       - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
     volumes:
@@ -51,10 +55,7 @@ services:
         APP_VERSION: ${APP_VERSION:-dev}
     command: ['web']
     environment:
-      DATABASE_URL: ${DATABASE_URL}
-      HEARTBEAT_INTERVAL_SECONDS: ${HEARTBEAT_INTERVAL_SECONDS:-15}
-      WATCHDOG_TIMEOUT_SECONDS: ${WATCHDOG_TIMEOUT_SECONDS:-90}
-      LOG_LEVEL: ${LOG_LEVEL:-info}
+      <<: *app-env
       PORT: 3000
       ORIGIN: ${ORIGIN:-http://localhost:3000}
     ports:

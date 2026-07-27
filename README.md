@@ -273,8 +273,11 @@ healthy, so folding their heartbeats into it would deadlock a cold start.
 ```bash
 bun install
 docker compose up -d postgres
-# .env ships with the Compose hostname; point DATABASE_URL at localhost for host-side work:
-#   DATABASE_URL=postgres://nightwatch:change-me@localhost:5432/nightwatch
+
+# Point host-side processes at the published Postgres port. Put this in .env.local, not .env:
+# Bun reads .env.local and Compose does not, so the containers keep using the `postgres` host.
+echo 'DATABASE_URL=postgres://nightwatch:change-me@localhost:5432/nightwatch' > .env.local
+
 bun run db:migrate
 bun run dev            # dashboard on http://localhost:5175
 bun run dev:worker     # in a second terminal

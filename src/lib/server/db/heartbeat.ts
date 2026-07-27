@@ -1,4 +1,3 @@
-import { sql } from 'drizzle-orm';
 import { getDb } from './client';
 import { heartbeat } from './schema';
 import { env } from '../env';
@@ -30,9 +29,4 @@ export async function readHeartbeats(): Promise<HeartbeatSnapshot[]> {
 			version: heartbeat.version
 		})
 		.from(heartbeat);
-}
-
-/** Throws if Postgres is unreachable; callers decide how loud that is. */
-export async function pingDatabase(): Promise<void> {
-	await getDb().execute(sql`select 1`);
 }
