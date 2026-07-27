@@ -20,6 +20,9 @@
 	<p class="text-sm text-slate-400">{m.scaffold_notice()}</p>
 
 	<nav class="flex flex-col gap-2 text-sm">
+		<a href={resolve('/kunden')} class="w-fit text-emerald-400 underline underline-offset-4">
+			{m.customers_link()}
+		</a>
 		<a
 			href={resolve('/einstellungen/postfaecher')}
 			class="w-fit text-emerald-400 underline underline-offset-4"
