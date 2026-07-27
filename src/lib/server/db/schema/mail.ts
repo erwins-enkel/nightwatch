@@ -86,6 +86,16 @@ export const mail = pgTable(
 		ankunftszeit: timestamp('ankunftszeit', { withTimezone: true }).notNull(),
 		verarbeitetAm: timestamp('verarbeitet_am', { withTimezone: true }),
 
+		/**
+		 * CONTEXT „Lernfenster": *Historie ist Lernmaterial, nicht Überwachungsmaterial.* A mail the
+		 * backfill pulled in feeds mail search, Takt recognition and rule derivation — it may never
+		 * make a monitor fire, or every freshly connected mailbox would be a ticket avalanche.
+		 *
+		 * Set at insert time from `ankunftszeit < postfach.erstellt_am`, which stays exact however
+		 * long the backfill runs and is still right when a `410 Gone` forces a resync years later.
+		 */
+		ausLernfenster: boolean('aus_lernfenster').notNull().default(false),
+
 		absender: text('absender').notNull(),
 		empfaenger: text('empfaenger')
 			.array()

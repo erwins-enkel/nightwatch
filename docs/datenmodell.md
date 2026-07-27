@@ -66,6 +66,34 @@ Folge für Folge-Sessions: `uebergang` verweist entweder auf `monitor` **oder** 
 `selbst_monitor`, abgesichert durch `uebergang_genau_ein_monitor`. Das deckt sich mit den
 Korrelations-Keys aus SPEC §7 (`nw:{monitorId}:{uebergangId}` vs. `self:…`).
 
+### Der Delta-Zustand eines Postfachs ist eine *Runde*, kein Token
+
+Graph kodiert alle einmal gesetzten Query-Optionen (`$select`, `$filter`) in die Links, die es
+zurückgibt — ein selbst zusammengebauter Aufruf aus einem extrahierten Token verlöre sie. Deshalb
+wird der **vollständige Link** persistiert:
+
+| Spalte | Bedeutung |
+|---|---|
+| `delta_token` | der `@odata.deltaLink` einer **abgeschlossenen** Runde |
+| `delta_folge_link` | der `@odata.nextLink` einer **laufenden** Runde |
+
+Beide `null` heißt „noch nie gepollt". Diese Trennung ist es, die einen 30-Tage-Backfill über
+mehrere Ticks verteilbar und neustart-fest macht: der Poller holt pro Lauf nur ein Seiten-Budget
+und hebt die Fortsetzung auf, statt ein volles Postfach in einem Rutsch zu ziehen.
+
+`naechster_poll_fruehestens_am` ist zugleich Fälligkeit **und** Lease: der Claim schiebt sie im
+selben Statement vor (`FOR UPDATE SKIP LOCKED`), womit zwei Worker dasselbe Postfach nicht
+gleichzeitig pollen können — ohne Advisory-Lock und ohne Lease-Tabelle. `fehler_in_folge` trägt den
+Exponenten der Backoff-Kurve; beides steht in der Zeile und nicht im Speicher, damit ein neu
+gestarteter Worker nicht gegen ein throttelndes Graph läuft.
+
+### `mail.aus_lernfenster` trennt Lernmaterial von Überwachungsmaterial
+
+CONTEXT „Lernfenster": *Historie ist Lernmaterial, nicht Überwachungsmaterial.* Die Spalte wird
+beim Insert aus `ankunftszeit < postfach.erstellt_am` berechnet — exakt, unabhängig davon wie lange
+der Backfill läuft, und auch nach einem späteren `410`-Resync noch richtig. „Alles aus der ersten
+Delta-Runde" wäre beides nicht.
+
 ### `uebergang` ist eine Episode, kein Zeitpunkt
 
 Eine Zeile spannt von „gesund → gestört" bis zur Entwarnung. SPEC §10 hängt Vorkommens-Zähler

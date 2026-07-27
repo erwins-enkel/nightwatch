@@ -23,12 +23,38 @@ export const postfach = pgTable('postfach', {
 	secretAblaufAm: timestamp('secret_ablauf_am', { withTimezone: true }),
 
 	// --- Delta state (SPEC §3) ---
+	/**
+	 * The complete `@odata.deltaLink` of the last finished round, not a bare token.
+	 *
+	 * Graph encodes every query option that was set once — `$select`, `$filter`, `changeType` — into
+	 * the link it hands back, and the documentation is explicit that the next round has to reuse
+	 * that URL verbatim. Rebuilding a request around an extracted token would silently drop those
+	 * options, so the whole link is what gets persisted. It is state, not a credential.
+	 */
 	deltaToken: text('delta_token'),
+	/**
+	 * The `@odata.nextLink` of a round that is still paging. Set means "resume here", null means the
+	 * round is settled — which is what makes a ~30-day backfill survive a restart instead of
+	 * starting over.
+	 */
+	deltaFolgeLink: text('delta_folge_link'),
 	letzterErfolgreicherPoll: timestamp('letzter_erfolgreicher_poll', { withTimezone: true }),
 	letzterFehlerCode: text('letzter_fehler_code'),
 	letzterFehlerText: text('letzter_fehler_text'),
 	letzterFehlerAm: timestamp('letzter_fehler_am', { withTimezone: true }),
 	pollIntervallSekunden: integer('poll_intervall_sekunden').notNull().default(120),
+
+	// --- Poll scheduling (SPEC §3: 429/503 backoff honouring Retry-After) ---
+	/**
+	 * When this mailbox may be polled again. Doubles as the scheduler's lease: claiming a mailbox
+	 * pushes this forward in the same statement, so two workers cannot pick up the same one.
+	 *
+	 * Persisted rather than kept in memory because a restarted worker must not hammer a Graph that
+	 * is already throttling us — `restart: unless-stopped` would otherwise reset the backoff.
+	 */
+	naechsterPollFruehestensAm: timestamp('naechster_poll_fruehestens_am', { withTimezone: true }),
+	/** Consecutive failures; the exponent of the backoff curve. Reset by every successful poll. */
+	fehlerInFolge: integer('fehler_in_folge').notNull().default(0),
 
 	// --- Lernfenster (CONTEXT „Lernfenster") ---
 	lernfensterTage: integer('lernfenster_tage').notNull().default(30),
