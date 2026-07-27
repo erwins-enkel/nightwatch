@@ -44,6 +44,16 @@ export const env = {
 		process.env.WATCHDOG_TIMEOUT_SECONDS,
 		90
 	),
+	/**
+	 * How often the worker looks for mailboxes that are due. Not the poll interval itself — that is
+	 * per mailbox (`postfach.poll_intervall_sekunden`, 60–300 s per SPEC §3). This only bounds how
+	 * late a due mailbox can be picked up, so it stays well below the shortest interval.
+	 */
+	ingestionTickMs: positiveSeconds(
+		'INGESTION_TICK_SECONDS',
+		process.env.INGESTION_TICK_SECONDS,
+		15
+	),
 	/** Touched on every main-loop tick; the container healthcheck reads its mtime. */
 	livenessFile: process.env.LIVENESS_FILE?.trim() || '/tmp/nightwatch-alive'
 } as const;

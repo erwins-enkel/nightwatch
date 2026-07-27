@@ -12,6 +12,7 @@ import { startWatchdogTimer } from '../lib/server/watchdog-timer';
 import { writeHeartbeat } from '../lib/server/db/heartbeat';
 import { closePool } from '../lib/server/db/client';
 import { createQueueClient, PGBOSS_SCHEMA } from '../lib/server/queue';
+import { startIngestionScheduler } from '../lib/server/ingestion/scheduler';
 
 const log = createLogger('worker');
 
@@ -34,6 +35,11 @@ const heartbeat = startHeartbeat({
 	onError: (err) => log.warn('heartbeat write failed', { error: describeError(err) })
 });
 
+// The Graph delta poller (SPEC §3). Deliberately not a pg-boss job: pg-boss carries the durable
+// retry queues for Autotask and webhooks, while a mailbox's next poll time lives in its own row.
+const ingestion = startIngestionScheduler({ tickMs: env.ingestionTickMs });
+log.info('ingestion scheduler started', { tickMs: env.ingestionTickMs });
+
 log.info('worker ready', { version: env.appVersion });
 
 let shuttingDown = false;
@@ -41,6 +47,7 @@ async function shutdown(signal: string): Promise<void> {
 	if (shuttingDown) return;
 	shuttingDown = true;
 	log.info('shutting down', { signal });
+	ingestion.stop();
 	heartbeat.stop();
 	watchdog.stop();
 	await boss.stop({ graceful: true }).catch((err: unknown) => {
