@@ -1,4 +1,4 @@
-import type { Alarmgrund, MonitorZustand } from '../db/schema/enums';
+import type { Alarmgrund, ErholungsArt, MonitorZustand } from '../db/schema/enums';
 import type { Wirkung } from './auswertung';
 
 /**
@@ -25,8 +25,14 @@ export type Zustandsaenderung =
 	| { art: 'vorkommen' }
 	/** Gestört, the reason changed. Only the switch *to* „Fehler gemeldet" is a Verschärfung. */
 	| { art: 'grundwechsel'; grund: Alarmgrund; verschaerfung: boolean }
-	/** Gestört → Gesund, evidence based. `entwarnt_am` stays untouched — that is #27. */
-	| { art: 'beenden' };
+	/**
+	 * Gestört → Gesund. `entwarnt_am` stays untouched — that is #27.
+	 *
+	 * The Erholungs-Art travels with the transition rather than being decided at the write: only
+	 * `beweis` may close a PSA ticket automatically, and „ein nach Zeitablauf stillgelegtes
+	 * Ereignis-Ticket darf nicht ungelesen zugehen" (CONTEXT „Beweisbasierte Erholung").
+	 */
+	| { art: 'beenden'; erholungsArt: ErholungsArt };
 
 /**
  * Whether the pause is currently in effect.
@@ -65,7 +71,9 @@ export function wendeAn(sicht: ZustandsSicht, wirkung: Wirkung, jetzt: Date): Zu
 		}
 
 		case 'erholung':
-			return sicht.zustand === 'gestoert' ? { art: 'beenden' } : { art: 'keine' };
+			return sicht.zustand === 'gestoert'
+				? { art: 'beenden', erholungsArt: wirkung.erholungsArt ?? 'beweis' }
+				: { art: 'keine' };
 	}
 }
 
