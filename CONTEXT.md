@@ -69,7 +69,9 @@ Laufzeit-Baseline. Beispiele: „mehr als 50 in 10 Minuten" · „normal ~100 OK
 Schonzeit der Zähler-**Untergrenze**: sie wird erst scharf, wenn seit der Aktivierung — oder seit
 dem Ende eines **Ausnahmetags** — ein volles Fenster T vergangen ist. Ohne Anlauf wäre jeder
 frisch aktivierte Zähl-Monitor sofort gestört, denn der Zähler startet bei 0 und Historie wird
-nie rückwirkend gewertet. Die **Obergrenze** gilt dagegen ab Sekunde 1.
+nie rückwirkend gewertet. Die **Obergrenze** gilt dagegen ab Sekunde 1. Derselbe Gedanke gilt beim
+**Kalenderplan**: dort ist der Anlauf das erste Abdeckungs-Fenster, das vollständig nach der
+Aktivierung liegt (siehe **Erwartung**).
 
 ### Erwartung (Heartbeat)
 
@@ -79,7 +81,11 @@ Die Soll-Definition eines Heartbeat-Monitors, wann eine Mail eintreffen muss. Zw
 Mail**, unabhängig von deren Klassifikation. Beim Kalenderplan gilt ein Soll-Zeitpunkt als
 abgedeckt, wenn seit dem vorherigen **wirksamen** Soll eine passende Mail eintraf — der
 Backup-Report von 23:40 deckt das „bis 06:00"-Soll des Folgetages (Jobs laufen oft früher als
-die Deadline).
+die Deadline). Beurteilt wird ein Soll erst, wenn sein Abdeckungs-Fenster **vollständig nach der
+Aktivierung** liegt — der **Anlauf** des Kalenderplans. Sonst reichte das Fenster in eine Zeit
+zurück, in der der Monitor noch nicht lief und in der eingetroffene Mails deshalb nicht zählen:
+ein um 05:59 aktivierter Monitor mit Soll 06:00 alarmierte sofort, obwohl der Report um 23:40
+gekommen war.
 
 **Intervall**:
 Gleitendes „spätestens alle X". Die Uhr startet bei jeder eingetroffenen Mail neu; kennt keine
