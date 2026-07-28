@@ -447,9 +447,12 @@ describe.skipIf(!databaseUrl && !process.env.CI)('Ingestion-Persistenz', () => {
 		};
 
 		/**
-		 * `ingestion_stand_am` steht per Default auf `now()` — ein frisches Postfach sagt über die
-		 * Vergangenheit nichts zu. Die Fälle unten spielen in fixierter Vergangenheit, also wird die
-		 * Ausgangs-Zusage mitfixiert; sonst gewönne der Default jedes `greatest`.
+		 * Eine bereits gegebene Zusage, von Hand gesetzt.
+		 *
+		 * `legePostfachAn` lässt `ingestion_stand_am` null — ein frisches Postfach hat nichts gelesen
+		 * und sagt nichts zu. Für die Monotonie-Fälle unten ist das der uninteressante Ausgangspunkt:
+		 * gegen null nimmt `greatest` jeden neuen Wert an, egal ob er vor- oder zurückspringt. Erst
+		 * mit einer vorhandenen Zusage lässt sich prüfen, dass sie nicht zurückgenommen wird.
 		 */
 		const AUSGANGS_STAND = new Date('2026-07-27T00:00:00Z');
 

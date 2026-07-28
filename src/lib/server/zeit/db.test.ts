@@ -68,8 +68,9 @@ describe.skipIf(!databaseUrl && !process.env.CI)('Zeit-Scheduler', () => {
 				tenantId: 'tenant',
 				clientId: 'client',
 				erstelltAm: new Date('2026-05-01T00:00:00Z'),
-				// Die Zusage: alles bis hierher ist abgeholt. Ohne sie stünde sie auf `now()`, und die
-				// Fälle unten spielen in fixierter Vergangenheit.
+				// Die Zusage: alles bis hierher ist abgeholt. Ohne sie bliebe sie null, und null
+				// blockiert jede Auswertung — die Fälle unten kämen gar nicht erst zum Urteilen.
+				// Weit genug in der Zukunft, dass sie nur hält, wo ein Fall sie eigens vorzieht.
 				ingestionStandAm: new Date('2026-06-30T00:00:00Z')
 			})
 			.returning({ id: schema.postfach.id });
