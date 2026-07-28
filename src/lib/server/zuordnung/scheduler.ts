@@ -1,5 +1,5 @@
 import { createLogger, describeError } from '../logger';
-import { STAPEL_GROESSE, verarbeiteStapel } from './verarbeitung';
+import { STAPEL_GROESSE, verarbeiteStapel, type MonitorStufeFabrik } from './verarbeitung';
 
 /**
  * The assignment pipeline's main loop, owned by the `worker` service (SPEC §2).
@@ -32,6 +32,12 @@ export interface SchedulerOptionen {
 	tickMs: number;
 	stapelGroesse?: number;
 	stapelProTick?: number;
+	/**
+	 * Stage 2 of the pipeline (#25). Handed down rather than imported by `verarbeiteStapel` itself:
+	 * this loop is the only caller in production, and keeping the wiring here is what lets the
+	 * customer stage be tested — and run — without the monitor core.
+	 */
+	monitorStufe?: MonitorStufeFabrik;
 	/** Injected in tests so the loop's own behaviour is checkable without a database. */
 	verarbeite?: (groesse: number) => Promise<number>;
 }
@@ -45,7 +51,8 @@ export function startZuordnungScheduler(optionen: SchedulerOptionen): Zuordnungs
 	const proTick = optionen.stapelProTick ?? STAPEL_PRO_TICK;
 	const verarbeite =
 		optionen.verarbeite ??
-		((stapelGroesse: number) => verarbeiteStapel({ groesse: stapelGroesse }));
+		((stapelGroesse: number) =>
+			verarbeiteStapel({ groesse: stapelGroesse, monitorStufe: optionen.monitorStufe }));
 	let laeuft = false;
 
 	async function tick(): Promise<void> {

@@ -1,9 +1,31 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { startZuordnungScheduler, STAPEL_PRO_TICK } from './scheduler';
+import { verarbeiteStapel, type MonitorStufeFabrik } from './verarbeitung';
+
+// Only the batch itself is faked; `STAPEL_GROESSE` and the seam types stay the real ones.
+vi.mock('./verarbeitung', async (importOriginal) => ({
+	...(await importOriginal<typeof import('./verarbeitung')>()),
+	verarbeiteStapel: vi.fn(() => Promise.resolve(0))
+}));
 
 describe('Zuordnungs-Scheduler', () => {
 	beforeEach(() => vi.useFakeTimers());
 	afterEach(() => vi.useRealTimers());
+
+	/**
+	 * Die Schleife ist der einzige Aufrufer von `verarbeiteStapel` im Betrieb — reicht sie die
+	 * Monitor-Stufe nicht durch, erreicht #25 die Pipeline nie und jede Mail bliebe unüberwacht.
+	 */
+	it('reicht die Monitor-Stufe an den Stapel durch', async () => {
+		vi.mocked(verarbeiteStapel).mockClear();
+		const monitorStufe = vi.fn() as unknown as MonitorStufeFabrik;
+		const scheduler = startZuordnungScheduler({ tickMs: 10_000, stapelGroesse: 50, monitorStufe });
+
+		await vi.advanceTimersByTimeAsync(0);
+		scheduler.stop();
+
+		expect(verarbeiteStapel).toHaveBeenCalledWith({ groesse: 50, monitorStufe });
+	});
 
 	it('verarbeitet sofort und danach im Takt', async () => {
 		const verarbeite = vi.fn(() => Promise.resolve(0));

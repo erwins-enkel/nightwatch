@@ -1,4 +1,5 @@
 import { getDb } from '../db/client';
+import type { Klassifikation } from '../db/schema/enums';
 import { bestimmeKunde, type MerkmalZeile } from './engine';
 import { betreffMuster, sortenSignatur } from './sorte';
 import {
@@ -25,28 +26,50 @@ import {
 /** Mails per batch. Small enough that the bodies of one batch comfortably fit in memory. */
 export const STAPEL_GROESSE = 100;
 
-/**
- * Stage 2 of the pipeline — **Kunde → Monitor** — which belongs to #25.
- *
- * Only the monitors of the recognised customer are eligible (CONTEXT „Match-Kriterien": they act
- * *after* the customer assignment). Returns the monitor that matched, or `null` for "none does",
- * which is what makes triage reason ③ observable. It receives the transaction so an implementation
- * can record its monitor-side state — `zuletzt_gesehen_am`, the state machine — atomically with the
- * mail it belongs to.
- */
-export type MonitorZuordnung = (
-	mail: StapelMail,
-	kundeId: string,
-	tx: Tx
-) => Promise<string | null>;
+/** What stage 2 decided about one mail: which monitor claims it, and how its rule reads it. */
+export interface MonitorTreffer {
+	monitorId: string;
+	klassifikation: Klassifikation | null;
+}
 
-/** The default until #25 lands: no monitors exist, so nothing can match. */
-export const keinMonitorTrifft: MonitorZuordnung = () => Promise.resolve(null);
+/** A mail that found its monitor, handed to the evaluation once the batch is written. */
+export interface AusgewerteteMail extends MonitorTreffer {
+	mail: StapelMail;
+}
+
+/**
+ * Stage 2 of the pipeline — **Kunde → Monitor** (#25) — in two phases.
+ *
+ * `ordne` runs while the batch is being decided and only compares values: only the monitors of the
+ * recognised customer are eligible (CONTEXT „Match-Kriterien": they act *after* the customer
+ * assignment), and `null` means "none does", which is what makes triage reason ③ observable.
+ *
+ * `werteAus` runs **after** the outcomes were written, inside the same transaction. That order is
+ * what the Zähler needs: its window counts the monitor's mails, including the ones this batch just
+ * assigned, so the count is a query rather than a tally over rows that do not exist yet.
+ */
+export interface MonitorStufe {
+	ordne(mail: StapelMail, kundeId: string): MonitorTreffer | null;
+	werteAus(treffer: AusgewerteteMail[], jetzt: Date): Promise<void>;
+}
+
+/**
+ * Built once per batch, so the monitors and their compiled rules are loaded once — the number of
+ * monitors follows the configuration, the number of mails does not.
+ */
+export type MonitorStufeFabrik = (tx: Tx) => Promise<MonitorStufe>;
+
+/** The default for callers that only want the customer stage (and for the tests of it). */
+export const ohneMonitore: MonitorStufeFabrik = () =>
+	Promise.resolve({
+		ordne: () => null,
+		werteAus: () => Promise.resolve()
+	});
 
 export interface StapelOptionen {
 	jetzt?: Date;
 	groesse?: number;
-	monitorZuordnung?: MonitorZuordnung;
+	monitorStufe?: MonitorStufeFabrik;
 	db?: ReturnType<typeof getDb>;
 }
 
@@ -60,15 +83,17 @@ export async function verarbeiteStapel(optionen: StapelOptionen = {}): Promise<n
 	const db = optionen.db ?? getDb();
 	const jetzt = optionen.jetzt ?? new Date();
 	const groesse = optionen.groesse ?? STAPEL_GROESSE;
-	const monitorZuordnung = optionen.monitorZuordnung ?? keinMonitorTrifft;
+	const monitorStufe = optionen.monitorStufe ?? ohneMonitore;
 
 	return db.transaction(async (tx) => {
 		const mails = await claimUnverarbeitete(groesse, tx);
 		if (mails.length === 0) return 0;
 
 		const index = await ladeMerkmalIndex(tx);
+		const stufe = await monitorStufe(tx);
 		const ergebnisse: MailErgebnis[] = [];
 		const sorten = new Map<string, SortenGruppe>();
+		const ausgewertet: AusgewerteteMail[] = [];
 
 		for (const mail of mails) {
 			const ergebnis = bestimmeKunde(mail, index);
@@ -91,18 +116,21 @@ export async function verarbeiteStapel(optionen: StapelOptionen = {}): Promise<n
 				// „stille Ablage" (CONTEXT „Archiviert"): the customer and the reason are recorded so the
 				// mail stays explainable, but nothing downstream happens — no monitor stage, no triage
 				// entry, and no Sorte, because an archived customer needs no new monitors.
-				ergebnisse.push(zugeordnet(mail.id, merkmal, null, null, null));
+				ergebnisse.push(zugeordnet(mail.id, merkmal, null, null, null, null));
 				continue;
 			}
 
-			const monitorId = await monitorZuordnung(mail, merkmal.kundeId, tx);
-			if (monitorId !== null) {
-				ergebnisse.push(zugeordnet(mail.id, merkmal, monitorId, null, null));
+			const treffer = stufe.ordne(mail, merkmal.kundeId);
+			if (treffer !== null) {
+				ergebnisse.push(
+					zugeordnet(mail.id, merkmal, treffer.monitorId, null, null, treffer.klassifikation)
+				);
+				ausgewertet.push({ ...treffer, mail });
 				continue;
 			}
 
 			const schluessel = zaehleSorte(sorten, mail, merkmal.kundeId);
-			ergebnisse.push(zugeordnet(mail.id, merkmal, null, schluessel, 'kein_monitor'));
+			ergebnisse.push(zugeordnet(mail.id, merkmal, null, schluessel, 'kein_monitor', null));
 		}
 
 		const sorteIds = await upsertSorten([...sorten.values()], tx);
@@ -115,12 +143,23 @@ export async function verarbeiteStapel(optionen: StapelOptionen = {}): Promise<n
 			tx
 		);
 
+		// After the write, so the Zähler's window sees this batch's mails as rows.
+		if (ausgewertet.length > 0) await stufe.werteAus(ausgewertet, jetzt);
+
 		return mails.length;
 	});
 }
 
 function leer(mailId: string, triageGrund: MailErgebnis['triageGrund']): MailErgebnis {
-	return { mailId, kundeId: null, merkmalId: null, monitorId: null, sorteId: null, triageGrund };
+	return {
+		mailId,
+		kundeId: null,
+		merkmalId: null,
+		monitorId: null,
+		sorteId: null,
+		triageGrund,
+		klassifikation: null
+	};
 }
 
 function zugeordnet(
@@ -129,7 +168,8 @@ function zugeordnet(
 	monitorId: string | null,
 	/** Carries the Sorten key until `upsertSorten` has turned it into a row id. */
 	sorteId: string | null,
-	triageGrund: MailErgebnis['triageGrund']
+	triageGrund: MailErgebnis['triageGrund'],
+	klassifikation: MailErgebnis['klassifikation']
 ): MailErgebnis {
 	return {
 		mailId,
@@ -137,7 +177,8 @@ function zugeordnet(
 		merkmalId: merkmal.id,
 		monitorId,
 		sorteId,
-		triageGrund
+		triageGrund,
+		klassifikation
 	};
 }
 

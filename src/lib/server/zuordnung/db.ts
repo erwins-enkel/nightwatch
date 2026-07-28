@@ -2,7 +2,12 @@ import { and, asc, desc, eq, exists, inArray, isNull, ne, sql, type SQLWrapper }
 import { alias, QueryBuilder } from 'drizzle-orm/pg-core';
 import { getDb } from '../db/client';
 import { kunde, mail, mailSorte, monitor, zuordnungsMerkmal } from '../db/schema';
-import type { KundeZustand, TriageGrund, ZuordnungsStufe } from '../db/schema/enums';
+import type {
+	Klassifikation,
+	KundeZustand,
+	TriageGrund,
+	ZuordnungsStufe
+} from '../db/schema/enums';
 import { baueMerkmalIndex, bestimmeKunde, type MerkmalIndex, type MerkmalZeile } from './engine';
 import { normalisiereWert } from './merkmal';
 
@@ -23,6 +28,8 @@ type Ausfuehrer = Db | Tx;
 /** A mail waiting for assignment, with exactly the columns the engine looks at. */
 export interface StapelMail {
 	id: string;
+	/** The monitor stage caches this on the monitor, so the Ingestion-Gate stays per mailbox. */
+	postfachId: string;
 	ankunftszeit: Date;
 	ausLernfenster: boolean;
 	absender: string;
@@ -46,6 +53,7 @@ export function claimUnverarbeitete(anzahl: number, tx: Tx): Promise<StapelMail[
 	return tx
 		.select({
 			id: mail.id,
+			postfachId: mail.postfachId,
 			ankunftszeit: mail.ankunftszeit,
 			ausLernfenster: mail.ausLernfenster,
 			absender: mail.absender,
@@ -140,6 +148,11 @@ export interface MailErgebnis {
 	monitorId: string | null;
 	sorteId: string | null;
 	triageGrund: TriageGrund | null;
+	/**
+	 * Only a mail that found a monitor can be classified — the rule's pattern slots belong to the
+	 * monitor. Null for everything else, and for the Zähler, whose slots are unused (CONTEXT).
+	 */
+	klassifikation: Klassifikation | null;
 }
 
 /**
@@ -162,7 +175,8 @@ export async function schreibeErgebnisse(
 			ergebnis.merkmalId,
 			ergebnis.monitorId,
 			ergebnis.sorteId,
-			ergebnis.triageGrund
+			ergebnis.triageGrund,
+			ergebnis.klassifikation
 		].join('\n');
 		const gruppe = gruppen.get(schluessel);
 		if (gruppe) gruppe.ids.push(ergebnis.mailId);
@@ -178,6 +192,7 @@ export async function schreibeErgebnisse(
 				monitorId: werte.monitorId,
 				sorteId: werte.sorteId,
 				triageGrund: werte.triageGrund,
+				klassifikation: werte.klassifikation,
 				verarbeitetAm: jetzt
 			})
 			.where(inArray(mail.id, ids));

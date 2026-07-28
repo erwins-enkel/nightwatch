@@ -75,8 +75,13 @@ function alsInhaltsmuster(wert: string): RegExp {
 	return new RegExp(`(?<![\\p{L}\\p{N}])${maskiere(wert)}(?![\\p{L}\\p{N}])`, 'u');
 }
 
-/** The domain of an address, or `null` for something that is not one. */
-function domain(adresse: string): string | null {
+/**
+ * The domain of an address, or `null` for something that is not one.
+ *
+ * Exported because a monitor's Absender-Match-Kriterium accepts the same two shapes as a Stufe-③
+ * trait (CONTEXT), and both must agree on what counts as a domain.
+ */
+export function domain(adresse: string): string | null {
 	const trenner = adresse.lastIndexOf('@');
 	if (trenner < 1 || trenner === adresse.length - 1) return null;
 	return adresse.slice(trenner + 1);

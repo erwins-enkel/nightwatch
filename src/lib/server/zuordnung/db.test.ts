@@ -13,7 +13,7 @@ import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import pg from 'pg';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as schema from '../db/schema';
 import {
 	claimUnverarbeitete,
@@ -249,13 +249,27 @@ describe.skipIf(!databaseUrl && !process.env.CI)('Zuordnung', () => {
 				})
 				.returning({ id: schema.monitor.id });
 			const mailId = await mailAnlegen();
+			const werteAus = vi.fn<(treffer: { monitorId: string }[]) => Promise<void>>(() =>
+				Promise.resolve()
+			);
 
-			await stapel({ monitorZuordnung: () => Promise.resolve(monitorZeile.id) });
+			await stapel({
+				monitorStufe: () =>
+					Promise.resolve({
+						ordne: () => ({ monitorId: monitorZeile.id, klassifikation: 'fehler' as const }),
+						werteAus
+					})
+			});
 
 			const zeile = await holeMail(mailId);
 			expect(zeile.monitorId).toBe(monitorZeile.id);
+			expect(zeile.klassifikation).toBe('fehler');
 			expect(zeile.triageGrund).toBeNull();
 			expect(zeile.sorteId).toBeNull();
+			// Die Auswertung läuft erst, wenn die Zuordnung geschrieben ist — darauf baut das
+			// Zähler-Fenster, das die Mails dieses Stapels mitzählen muss.
+			expect(werteAus).toHaveBeenCalledOnce();
+			expect(werteAus.mock.calls[0][0]).toMatchObject([{ monitorId: monitorZeile.id }]);
 		});
 	});
 
