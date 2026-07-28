@@ -16,6 +16,7 @@ x-app-env: &app-env
   WATCHDOG_TIMEOUT_SECONDS: ${WATCHDOG_TIMEOUT_SECONDS:-90}
   INGESTION_TICK_SECONDS: ${INGESTION_TICK_SECONDS:-15}
   ZUORDNUNG_TICK_SECONDS: ${ZUORDNUNG_TICK_SECONDS:-10}
+  ZEIT_TICK_SECONDS: ${ZEIT_TICK_SECONDS:-30}
   LOG_LEVEL: ${LOG_LEVEL:-info}
   # Encrypts stored credentials (SPEC §12). Deliberately not `:?` — the stack has to come up
   # without it so an operator can reach the settings page; it is required at the moment a mailbox

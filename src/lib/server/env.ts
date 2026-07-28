@@ -64,6 +64,14 @@ export const env = {
 		process.env.ZUORDNUNG_TICK_SECONDS,
 		10
 	),
+	/**
+	 * How often the worker re-derives the time conditions (overdue, open too long, counter window).
+	 *
+	 * Coarser than the other two because nothing here is event driven: a tick only asks "is this
+	 * true now?", and the answer keeps for a while. It bounds how late an alarm can be, so it stays
+	 * well below the smallest sensible Karenz.
+	 */
+	zeitTickMs: positiveSeconds('ZEIT_TICK_SECONDS', process.env.ZEIT_TICK_SECONDS, 30),
 	/** Touched on every main-loop tick; the container healthcheck reads its mtime. */
 	livenessFile: process.env.LIVENESS_FILE?.trim() || '/tmp/nightwatch-alive'
 } as const;
