@@ -13,6 +13,7 @@ import { writeHeartbeat } from '../lib/server/db/heartbeat';
 import { closePool } from '../lib/server/db/client';
 import { createQueueClient, PGBOSS_SCHEMA } from '../lib/server/queue';
 import { startIngestionScheduler } from '../lib/server/ingestion/scheduler';
+import { startZuordnungScheduler } from '../lib/server/zuordnung/scheduler';
 
 const log = createLogger('worker');
 
@@ -40,6 +41,12 @@ const heartbeat = startHeartbeat({
 const ingestion = startIngestionScheduler({ tickMs: env.ingestionTickMs });
 log.info('ingestion scheduler started', { tickMs: env.ingestionTickMs });
 
+// Stage 1 of the assignment pipeline (SPEC §4). Separate from the ingestion loop on purpose: the
+// queue is `mail.verarbeitet_am is null`, so a backfill drains by itself and a new
+// Zuordnungs-Merkmal can send unassigned mails back through with a single UPDATE.
+const zuordnung = startZuordnungScheduler({ tickMs: env.zuordnungTickMs });
+log.info('zuordnung scheduler started', { tickMs: env.zuordnungTickMs });
+
 log.info('worker ready', { version: env.appVersion });
 
 let shuttingDown = false;
@@ -48,6 +55,7 @@ async function shutdown(signal: string): Promise<void> {
 	shuttingDown = true;
 	log.info('shutting down', { signal });
 	ingestion.stop();
+	zuordnung.stop();
 	heartbeat.stop();
 	watchdog.stop();
 	await boss.stop({ graceful: true }).catch((err: unknown) => {

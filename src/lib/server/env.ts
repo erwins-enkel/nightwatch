@@ -54,6 +54,16 @@ export const env = {
 		process.env.INGESTION_TICK_SECONDS,
 		15
 	),
+	/**
+	 * How often the worker looks for mails the assignment has not placed yet. Well below the
+	 * shortest poll interval, so a freshly ingested mail is assigned within seconds rather than
+	 * waiting out an ingestion cycle it has nothing to do with.
+	 */
+	zuordnungTickMs: positiveSeconds(
+		'ZUORDNUNG_TICK_SECONDS',
+		process.env.ZUORDNUNG_TICK_SECONDS,
+		10
+	),
 	/** Touched on every main-loop tick; the container healthcheck reads its mtime. */
 	livenessFile: process.env.LIVENESS_FILE?.trim() || '/tmp/nightwatch-alive'
 } as const;
