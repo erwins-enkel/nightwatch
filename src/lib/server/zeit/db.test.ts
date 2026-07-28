@@ -212,6 +212,33 @@ describe.skipIf(!databaseUrl && !process.env.CI)('Zeit-Scheduler', () => {
 			});
 		});
 
+		/**
+		 * `min()` überspringt NULL. Würde die fehlende Zusage einfach mitgemittelt, fiele ausgerechnet
+		 * das Postfach aus der Schranke, das noch gar nichts gelesen hat — deshalb wird sie gezählt
+		 * und blockiert.
+		 */
+		it('blockiert alles, solange ein aktives Postfach nichts zugesagt hat', async () => {
+			await db
+				.update(schema.postfach)
+				.set({ ingestionStandAm: null })
+				.where(eq(schema.postfach.id, postfachId));
+
+			expect(await bewertungsSchranke(new Date('2026-06-03T05:00:00Z'), db)).toEqual({
+				bewertbarBis: new Date(0),
+				haltendVon: 'keine_zusage'
+			});
+		});
+
+		it('lässt ein Postfach ohne Zusage die Schranke nicht halten, wenn es inaktiv ist', async () => {
+			await db
+				.update(schema.postfach)
+				.set({ ingestionStandAm: null, aktiv: false })
+				.where(eq(schema.postfach.id, postfachId));
+			const jetzt = new Date('2026-06-03T05:00:00Z');
+
+			expect((await bewertungsSchranke(jetzt, db)).bewertbarBis).toEqual(jetzt);
+		});
+
 		it('lässt ein inaktives Postfach die Schranke nicht halten', async () => {
 			await setzeIngestionsStand(new Date('2026-06-01T00:00:00Z'));
 			await db
@@ -557,6 +584,23 @@ describe.skipIf(!databaseUrl && !process.env.CI)('Zeit-Scheduler', () => {
 			// Gate wieder offen: dasselbe Soll wird jetzt bewertet — ausgesetzt, nicht verworfen.
 			await werteZeitAus({ jetzt: new Date('2026-06-03T05:00:00Z'), db });
 			expect(await episoden(id)).toHaveLength(1);
+		});
+
+		/** Der Dead-Man's-Switch schweigt lieber, als über ein Postfach zu urteilen, das nichts gelesen hat. */
+		it('wertet gar nichts aus, solange ein Postfach nichts zugesagt hat', async () => {
+			const id = await monitor('heartbeat', KALENDERPLAN);
+			await db
+				.update(schema.postfach)
+				.set({ ingestionStandAm: null })
+				.where(eq(schema.postfach.id, postfachId));
+
+			const bericht = await werteZeitAus({ jetzt: new Date('2026-06-03T05:00:00Z'), db });
+
+			expect(bericht.schranke.haltendVon).toBe('keine_zusage');
+			expect(bericht.geprueft).toBe(0);
+			expect(await episoden(id)).toHaveLength(0);
+			// Ausgesetzt, nicht verworfen: der Cursor steht unverändert auf der Aktivierung.
+			expect((await zustand(id)).sollGeprueftBisAm).toEqual(new Date('2026-06-02T00:00:00Z'));
 		});
 
 		it('wertet einen nicht aktivierten Monitor nicht aus', async () => {

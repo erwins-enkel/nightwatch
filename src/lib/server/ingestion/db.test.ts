@@ -461,6 +461,41 @@ describe.skipIf(!databaseUrl && !process.env.CI)('Ingestion-Persistenz', () => {
 			await claimFaellige(4, begonnenAm, db);
 		};
 
+		/**
+		 * Ein frisches Postfach hat nichts gelesen, also darf es auch nichts zusagen. Ein `now()`-
+		 * Default würde Mail beglaubigen, die noch bei Graph liegt — und die Migration reichte
+		 * dieselbe Falschaussage an jedes Bestands-Postfach weiter, auch an die gerade gestörten.
+		 */
+		it('sagt vor der ersten abgeschlossenen Runde nichts zu', async () => {
+			const id = await neuesPostfach();
+
+			expect((await stand(id)).ingestionStandAm).toBeNull();
+		});
+
+		it('gibt die erste Zusage mit der ersten abgeschlossenen Runde', async () => {
+			const id = await neuesPostfach();
+			await db
+				.update(schema.postfach)
+				.set({ naechsterPollFruehestensAm: null })
+				.where(eq(schema.postfach.id, id));
+			await claimFaellige(4, new Date('2026-07-27T12:00:00Z'), db);
+
+			await vermerkeErfolg(
+				{
+					postfachId: id,
+					jetzt: new Date('2026-07-27T12:00:30Z'),
+					deltaToken: 'https://graph/delta-1',
+					deltaFolgeLink: null,
+					rundeAbgeschlossen: true,
+					lernfensterAbgeschlossen: true,
+					intervallSekunden: 120
+				},
+				db
+			);
+
+			expect((await stand(id)).ingestionStandAm).toEqual(new Date('2026-07-27T11:59:00Z'));
+		});
+
 		it('stempelt den Rundenbeginn beim Claim, der eine neue Runde startet', async () => {
 			const id = await neuesPostfach();
 			const begonnenAm = new Date('2026-07-27T12:00:00Z');

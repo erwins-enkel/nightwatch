@@ -62,11 +62,17 @@ export const postfach = pgTable('postfach', {
 	 * suspends the time evaluation for as long as ingestion is demonstrably broken — CONTEXT
 	 * „Ingestion-Gate", derived from data rather than from a state machine.
 	 *
-	 * Defaults to *now* rather than to the epoch: a fresh mailbox promises nothing about the past,
-	 * and an epoch default would freeze every other mailbox's monitors until its first round
-	 * settled.
+	 * **Null until the first round settles**, and null means „nothing promised" — deliberately not a
+	 * `now()` default. A mailbox that has never polled has read nothing, so a default would certify
+	 * mail that is still sitting in Graph, and the migration would hand that same false certificate
+	 * to every existing mailbox including the ones currently failing. The Dead-Man's-Switch would
+	 * then judge a mailbox that is provably behind.
+	 *
+	 * Null therefore has to **block** rather than be ignored: `min()` skips nulls, so a mailbox with
+	 * nothing promised would otherwise silently fail to hold the bound back — see
+	 * `zeit/db.ts` → `bewertungsSchranke`.
 	 */
-	ingestionStandAm: timestamp('ingestion_stand_am', { withTimezone: true }).notNull().defaultNow(),
+	ingestionStandAm: timestamp('ingestion_stand_am', { withTimezone: true }),
 	letzterFehlerCode: text('letzter_fehler_code'),
 	letzterFehlerText: text('letzter_fehler_text'),
 	letzterFehlerAm: timestamp('letzter_fehler_am', { withTimezone: true }),

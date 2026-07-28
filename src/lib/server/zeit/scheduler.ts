@@ -230,6 +230,19 @@ export async function werteZeitAus(optionen: AuswertungsOptionen = {}): Promise<
 	const gate = await (optionen.gate ?? ohneGate)();
 
 	const schranke = await bewertungsSchranke(jetzt, db);
+
+	/**
+	 * A mailbox that has never settled a round promises nothing, and nothing it has not read can be
+	 * told apart from mail that never came. Nothing is judged at all until it reports in.
+	 *
+	 * Logged every tick rather than only past the lag threshold: this state is normal for the first
+	 * minutes after an upgrade or a new mailbox, and mysterious for anyone who does not know that.
+	 */
+	if (schranke.haltendVon === 'keine_zusage') {
+		log.warn('Zeit-Auswertung ausgesetzt: Postfach ohne Vollständigkeits-Zusage');
+		return { schranke, geprueft: 0, wirkungen: 0 };
+	}
+
 	const zone = await ladeZeitzone(db);
 
 	const rueckstandMs = jetzt.getTime() - schranke.bewertbarBis.getTime();

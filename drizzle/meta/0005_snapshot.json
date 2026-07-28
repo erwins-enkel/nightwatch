@@ -1,5 +1,5 @@
 {
-  "id": "6a4eefb9-dbb1-4c49-b3d2-15c3a987ab5e",
+  "id": "cc139351-2231-49ce-9b1f-d4f9922064aa",
   "prevId": "bd9e4052-dc5f-4bba-a3bd-2139a7430933",
   "version": "7",
   "dialect": "postgresql",
@@ -79,8 +79,7 @@
           "name": "ingestion_stand_am",
           "type": "timestamp with time zone",
           "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
+          "notNull": false
         },
         "letzter_fehler_code": {
           "name": "letzter_fehler_code",

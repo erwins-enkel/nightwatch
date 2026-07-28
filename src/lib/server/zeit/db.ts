@@ -37,13 +37,22 @@ function alsDatum(wert: string | Date | null | undefined): Date | null {
 // ---------------------------------------------------------------------------------------------
 
 /** Which part of the pipeline is holding the bound back. */
-export type SchrankenGrund = 'jetzt' | 'ingestion' | 'zuordnung';
+export type SchrankenGrund = 'jetzt' | 'ingestion' | 'zuordnung' | 'keine_zusage';
 
 export interface Schranke {
 	/** Nothing past this point may be judged. */
 	bewertbarBis: Date;
 	haltendVon: SchrankenGrund;
 }
+
+/**
+ * The bound when an active mailbox has promised nothing at all.
+ *
+ * The epoch rather than a null `bewertbarBis`: every comparison downstream then yields „not due"
+ * by itself, so forgetting the short circuit in `werteZeitAus` costs a pointless query rather than
+ * a wrong verdict.
+ */
+const NICHTS_BEWERTBAR = new Date(0);
 
 /**
  * How far the time evaluation may judge (#26).
@@ -62,22 +71,43 @@ export interface Schranke {
  * ingestion bound with a backlog reading that predates the mails it covers — the precise race the
  * bound exists to prevent.
  *
+ * `ohne_zusage` is counted rather than inferred from `min()`, because aggregate functions skip
+ * nulls: a mailbox that has never completed a round would otherwise drop silently out of the
+ * minimum — the one mailbox that knows nothing would be the one not holding the bound.
+ *
  * Global rather than per mailbox: `monitor.postfach_id` only caches where a monitor's mail last
  * came from, and the next one may arrive through a different mailbox.
  */
 export async function bewertungsSchranke(jetzt: Date, db: Ausfuehrer = getDb()): Promise<Schranke> {
 	const ergebnis = await db.execute<{
 		ingestion: string | Date | null;
+		ohne_zusage: number | string;
 		zuordnung: string | Date | null;
 	}>(sql`
 		select
 			(select min(${postfach.ingestionStandAm}) from ${postfach} where ${postfach.aktiv})
 				as ingestion,
+			(select count(*) from ${postfach}
+				where ${postfach.aktiv} and ${postfach.ingestionStandAm} is null)::int
+				as ohne_zusage,
 			(select min(${mail.ankunftszeit}) from ${mail} where ${mail.verarbeitetAm} is null)
 				as zuordnung
 	`);
 
 	const zeile = ergebnis.rows[0];
+
+	/**
+	 * An active mailbox that has not settled a single round has read nothing, and nothing it has not
+	 * read can be told apart from mail that never arrived. Until it reports in, no absence anywhere
+	 * is evidence — the alternative is a Dead-Man's-Switch that judges a mailbox it knows is behind.
+	 *
+	 * Costs one poll interval after an upgrade and the length of a backfill when a mailbox is added.
+	 * `werteZeitAus` logs it, so the standstill is visible rather than mysterious.
+	 */
+	if (Number(zeile?.ohne_zusage ?? 0) > 0) {
+		return { bewertbarBis: NICHTS_BEWERTBAR, haltendVon: 'keine_zusage' };
+	}
+
 	const ingestion = alsDatum(zeile?.ingestion);
 	const zuordnung = alsDatum(zeile?.zuordnung);
 
