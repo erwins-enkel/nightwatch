@@ -104,6 +104,14 @@ describe.skipIf(!databaseUrl && !process.env.CI)('Monitor-CRUD', () => {
 		return zeile;
 	};
 
+	const holeVorlageId = async (monitorId: string) => {
+		const [zeile] = await db
+			.select({ vorlageId: schema.regel.vorlageId })
+			.from(schema.regel)
+			.where(eq(schema.regel.monitorId, monitorId));
+		return zeile.vorlageId;
+	};
+
 	// -----------------------------------------------------------------------------------------
 	describe('Anlegen', () => {
 		it('legt Monitor und Regel zusammen an', async () => {
@@ -157,6 +165,21 @@ describe.skipIf(!databaseUrl && !process.env.CI)('Monitor-CRUD', () => {
 			);
 
 			expect((await holeMonitor(id, db)).regelMusterSchlecht).toEqual(['failed', 'error']);
+		});
+
+		/** Die Herkunft gehört zur Regel — sonst zeigt sie nach dem Überarbeiten auf eine Vorlage,
+		 * aus der die Regel längst nicht mehr stammt. */
+		it('schreibt die Vorlagen-Herkunft mit', async () => {
+			const [vorlage] = await db
+				.insert(schema.regelVorlage)
+				.values({ schluessel: 'veeam-report', name: 'Veeam-Report', herkunft: 'kuratiert' })
+				.returning({ id: schema.regelVorlage.id });
+			const id = await anlegen({ quelle: 'vorlage', vorlageId: vorlage.id });
+			expect(await holeVorlageId(id)).toBe(vorlage.id);
+
+			await aktualisiereMonitor(id, eingabe({ quelle: 'manuell' }), db);
+
+			expect(await holeVorlageId(id)).toBeNull();
 		});
 
 		/**

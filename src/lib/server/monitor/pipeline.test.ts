@@ -254,8 +254,13 @@ describe.skipIf(!databaseUrl && !process.env.CI)('Monitor-Kern', () => {
 			await mailAnlegen({ betreff: 'Backup failed', ankunftszeit: spaeter });
 			await stapel();
 
+			// Der Monitor trägt stets den *aktuellen* Grund …
+			expect((await holeMonitorZeile(monitorId)).alarmgrund).toBe('fehler_gemeldet');
+
 			const [episode] = await holeUebergaenge(monitorId);
-			expect(episode.alarmgrund).toBe('fehler_gemeldet');
+			// … die Episode den Grund, mit dem alarmiert wurde. Überschriebe der Wechsel ihn, behauptete
+			// die Episode rückwirkend, es sei nie um etwas anderes gegangen.
+			expect(episode.alarmgrund).toBe('unklar');
 			expect(episode.verschaerftAm).toEqual(spaeter);
 			expect(episode.vorkommen).toBe(2);
 		});

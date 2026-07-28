@@ -291,6 +291,11 @@ export async function schreibeWirkung(
 			break;
 
 		case 'grundwechsel': {
+			// Only the *live* reason moves. `uebergang.alarmgrund` is the reason at alarm time and
+			// stays what it was: it is what the alarm went out with (SPEC §7's correlation key and
+			// #27's ticket text hang off it), and overwriting it would make the episode claim it had
+			// always been about something else. The change of reason is visible as `verschaerft_am`
+			// where it matters, and on the monitor where the dashboard reads it.
 			felder.alarmgrund = aenderung.grund;
 			neu.alarmgrund = aenderung.grund;
 
@@ -302,7 +307,6 @@ export async function schreibeWirkung(
 				await tx
 					.update(uebergang)
 					.set({
-						alarmgrund: aenderung.grund,
 						letztesVorkommenAm: zeitpunkt,
 						vorkommen: sql`${uebergang.vorkommen} + 1`,
 						...(verschaerftJetzt ? { verschaerftAm: zeitpunkt } : {})
@@ -469,9 +473,16 @@ export async function aktualisiereMonitor(
 			})
 			.where(eq(monitor.id, id));
 
+		// The rule is rewritten whole, provenance included: „Regel überarbeiten" hands back the
+		// complete rule, so a template link that is no longer part of it is gone on purpose.
 		await tx
 			.update(regel)
-			.set({ ...regelWerte, quelle: eingabe.quelle, geaendertAm: new Date() })
+			.set({
+				...regelWerte,
+				quelle: eingabe.quelle,
+				vorlageId: eingabe.vorlageId ?? null,
+				geaendertAm: new Date()
+			})
 			.where(eq(regel.monitorId, id));
 
 		return { art: 'ok', id };
