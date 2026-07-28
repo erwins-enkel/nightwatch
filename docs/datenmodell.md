@@ -142,6 +142,36 @@ den `ausnahmetag`-Zeilen. Eine materialisierte Spalte wäre redundanter Zustand,
 `aktiviert_am` ist zugleich die Grenze „ab hier vorwärts": vor diesem Zeitpunkt darf nie
 alarmiert werden (CONTEXT „Lernfenster" — Historie ist Lernmaterial, kein Überwachungsmaterial).
 
+**Aber ein `soll_geprueft_bis_am`.** Der Zeit-Scheduler (#26) merkt sich je Monitor, bis wohin er
+die Soll-Zeitpunkte des Kalenderplans beurteilt hat. Das ist — anders als der Anlauf — *kein*
+materialisierter Ableitungswert, sondern ein Fortschritts-Merker über gefällte Entscheidungen:
+`zuletzt_gesehen_am` kennt nur die letzte Mail, also lässt sich nach einem Stillstand aus keiner
+anderen Spalte mehr sagen, ob das Soll von vorgestern abgedeckt war. Ohne ihn würde ein verpasstes
+Soll still vergeben. Er wandert nur vorwärts (`greatest`), damit ein Soll nie zweimal zählt.
+
+### Die Ingestion sagt zu, bis wohin sie vollständig ist
+
+`postfach.ingestion_stand_am` behauptet: **jede** Mail dieses Postfachs mit
+`ankunftszeit <= ingestion_stand_am` liegt als Zeile vor. Der Zeit-Scheduler urteilt nie darüber
+hinaus — sonst gälte ein Heartbeat um 06:00 als überfällig, während der 05:58-Report noch bei Graph
+liegt, und der Fehlalarm wäre nicht mehr einzufangen.
+
+Die Zusage rückt nur vor, wo sie belegbar ist: wenn eine Delta-Runde **abgeschlossen** ist (Graph
+liefert `@odata.deltaLink`), und dann auf den **Beginn** dieser Runde minus einer Sicherheitsspanne
+für Graphs eventually consistent Delta-Index — nicht auf ihr Ende, denn eine zehn Minuten pagende
+Runde weiß über diese zehn Minuten nichts. Dafür merkt sich `runde_begonnen_am` den Rundenbeginn.
+Ein Fehlschlag rückt nichts vor; ein gestörtes Postfach setzt die Zeit-Auswertung damit von selbst
+aus — CONTEXT „Ingestion-Gate", aus den Daten abgeleitet statt aus einer Zustandsmaschine.
+
+**NULL heißt „nichts zugesagt", und das blockiert.** Die Spalte hat bewusst *keinen*
+`now()`-Default: ein Postfach, das noch nie gepollt hat, hat nichts gelesen, und ein Default würde
+Mail beglaubigen, die noch bei Graph liegt — die Migration reichte dieselbe Falschaussage an jedes
+Bestands-Postfach weiter, auch an die gerade gestörten, und der erste Tick nach dem Update urteilte
+über einen Rückstand, von dem er nichts weiß. Weil `min()` NULL überspringt, zählt
+`bewertungsSchranke` die Postfächer ohne Zusage getrennt und setzt die Auswertung dann ganz aus;
+sonst fiele ausgerechnet das ahnungsloseste Postfach aus der Schranke. Kosten: ein Poll-Intervall
+nach einem Update, die Dauer eines Backfills beim Verbinden eines Postfachs — beides geloggt.
+
 ### Zwei Muster-Slots, vier Lesarten
 
 `regel.muster_schlecht` und `regel.muster_gut` sind bewusst generisch benannt. Jede Monitor-Art

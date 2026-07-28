@@ -47,8 +47,23 @@ describe('Zustandsmaschine', () => {
 
 	it('beendet die Episode bei beweisbasierter Erholung', () => {
 		expect(wendeAn(sicht({ zustand: 'gestoert', alarmgrund: 'unklar' }), erholung, JETZT)).toEqual({
-			art: 'beenden'
+			art: 'beenden',
+			erholungsArt: 'beweis'
 		});
+	});
+
+	/**
+	 * Auto-Zurück und Erledigen sind kein Beweis — sie kommentieren nur (CONTEXT). Reichte die
+	 * Erholungs-Art nicht bis hierher durch, schlösse #27 ein ungelesenes Ereignis-Ticket.
+	 */
+	it('reicht eine nicht beweisbasierte Erholungs-Art durch', () => {
+		expect(
+			wendeAn(
+				sicht({ zustand: 'gestoert', alarmgrund: 'ereignis_eingetroffen' }),
+				{ art: 'erholung', erholungsArt: 'auto_zurueck' },
+				JETZT
+			)
+		).toEqual({ art: 'beenden', erholungsArt: 'auto_zurueck' });
 	});
 
 	it('lässt eine Erholung im gesunden Zustand folgenlos', () => {
@@ -71,7 +86,10 @@ describe('Pausiert', () => {
 			alarmgrund: 'fehler_gemeldet',
 			pausiert: true
 		});
-		expect(wendeAn(pausiertUndGestoert, erholung, JETZT)).toEqual({ art: 'beenden' });
+		expect(wendeAn(pausiertUndGestoert, erholung, JETZT)).toEqual({
+			art: 'beenden',
+			erholungsArt: 'beweis'
+		});
 	});
 
 	it('endet mit dem Auto-Ende, ohne dass jemand eine Spalte umlegt', () => {

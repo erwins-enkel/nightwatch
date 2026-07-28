@@ -329,7 +329,7 @@ export async function schreibeWirkung(
 				// Only the internal end. `entwarnt_am` is set once the stability window held (#27).
 				await tx
 					.update(uebergang)
-					.set({ beendetAm: zeitpunkt, erholungsArt: 'beweis' })
+					.set({ beendetAm: zeitpunkt, erholungsArt: aenderung.erholungsArt })
 					.where(eq(uebergang.id, laufzeit.offenerUebergangId));
 			}
 			neu.offenerUebergangId = null;
@@ -452,6 +452,8 @@ export async function aktualisiereMonitor(
 	const { parameter, regel: regelWerte, fehler } = pruefeEingabe(eingabe);
 	if (fehler.length > 0) return { art: 'ungueltig', fehler };
 
+	const jetzt = new Date();
+
 	return db.transaction(async (tx) => {
 		const [vorher] = await tx
 			.select({ art: monitor.art })
@@ -461,7 +463,7 @@ export async function aktualisiereMonitor(
 		if (!vorher) return { art: 'unbekannt' };
 
 		const artWechsel = vorher.art !== eingabe.art;
-		if (artWechsel) await beendeStill(id, new Date(), tx);
+		if (artWechsel) await beendeStill(id, jetzt, tx);
 
 		await tx
 			.update(monitor)
@@ -469,6 +471,9 @@ export async function aktualisiereMonitor(
 				bezeichnung: eingabe.bezeichnung.trim(),
 				art: eingabe.art,
 				entwarnungsStabilitaetSekunden: eingabe.entwarnungsStabilitaetSekunden ?? null,
+				// The time cursor restarts here (#26): a rewritten Erwartung must not have its old
+				// Soll-Zeitpunkte replayed under the new plan.
+				sollGeprueftBisAm: jetzt,
 				...parameterSpalten(parameter)
 			})
 			.where(eq(monitor.id, id));
@@ -481,7 +486,7 @@ export async function aktualisiereMonitor(
 				...regelWerte,
 				quelle: eingabe.quelle,
 				vorlageId: eingabe.vorlageId ?? null,
-				geaendertAm: new Date()
+				geaendertAm: jetzt
 			})
 			.where(eq(regel.monitorId, id));
 
@@ -513,6 +518,9 @@ async function beendeStill(monitorId: string, jetzt: Date, tx: Tx): Promise<void
  *
  * Activating always stamps *now*, also when re-activating: „Ein Monitor wertet ausschließlich ab
  * seiner Aktivierung vorwärts" (CONTEXT „Lernfenster") — the gap while it was off is not his.
+ *
+ * The time cursor starts at the same instant, so the scheduler (#26) never reaches back past the
+ * activation for a Soll-Zeitpunkt either.
  */
 export async function setzeAktivierung(
 	id: string,
@@ -524,7 +532,7 @@ export async function setzeAktivierung(
 		if (!aktiv) await beendeStill(id, jetzt, tx);
 		await tx
 			.update(monitor)
-			.set({ aktiviertAm: aktiv ? jetzt : null })
+			.set({ aktiviertAm: aktiv ? jetzt : null, sollGeprueftBisAm: aktiv ? jetzt : null })
 			.where(eq(monitor.id, id));
 	});
 }

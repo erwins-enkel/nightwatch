@@ -50,6 +50,16 @@ export type PollErgebnis =
 			deltaFolgeLink: string | null;
 			/** Set once the round settled. */
 			deltaToken: string | null;
+			/**
+			 * True only when Graph closed the round with an `@odata.deltaLink`.
+			 *
+			 * This is the completeness proof `postfach.ingestion_stand_am` rests on (#26), so it is
+			 * reported explicitly rather than inferred from the two link fields: when the page budget
+			 * runs out without either link, the run also ends with `deltaFolgeLink: null` while
+			 * carrying the *previous* round's token — indistinguishable from a settled round, and
+			 * claiming completeness there would be claiming it without evidence.
+			 */
+			rundeAbgeschlossen: boolean;
 			/** True when this run finished the initial (learning-window) round. */
 			lernfensterAbgeschlossen: boolean;
 	  }
@@ -180,6 +190,7 @@ export async function pollePostfach(optionen: PollOptionen): Promise<PollErgebni
 				mails,
 				deltaFolgeLink: null,
 				deltaToken: inhalt['@odata.deltaLink'],
+				rundeAbgeschlossen: true,
 				lernfensterAbgeschlossen: imLernfenster
 			};
 		}
@@ -194,6 +205,7 @@ export async function pollePostfach(optionen: PollOptionen): Promise<PollErgebni
 		mails,
 		deltaFolgeLink: url ?? null,
 		deltaToken: url ? null : (postfach.deltaToken ?? null),
+		rundeAbgeschlossen: false,
 		lernfensterAbgeschlossen: false
 	};
 }

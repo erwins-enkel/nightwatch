@@ -14,6 +14,7 @@ import { closePool } from '../lib/server/db/client';
 import { createQueueClient, PGBOSS_SCHEMA } from '../lib/server/queue';
 import { startIngestionScheduler } from '../lib/server/ingestion/scheduler';
 import { startZuordnungScheduler } from '../lib/server/zuordnung/scheduler';
+import { startZeitScheduler } from '../lib/server/zeit/scheduler';
 import { monitorStufe } from '../lib/server/monitor/pipeline';
 
 const log = createLogger('worker');
@@ -49,6 +50,12 @@ log.info('ingestion scheduler started', { tickMs: env.ingestionTickMs });
 const zuordnung = startZuordnungScheduler({ tickMs: env.zuordnungTickMs, monitorStufe });
 log.info('zuordnung scheduler started', { tickMs: env.zuordnungTickMs });
 
+// The time-triggered half of the Dreiklang-Vertrag (SPEC §5–6) — the Dead-Man's-Switch itself.
+// Until this loop runs, only an arriving mail can move a monitor, so the one thing Nightwatch
+// exists for (nothing arrived) could never be noticed.
+const zeit = startZeitScheduler({ tickMs: env.zeitTickMs });
+log.info('zeit scheduler started', { tickMs: env.zeitTickMs });
+
 log.info('worker ready', { version: env.appVersion });
 
 let shuttingDown = false;
@@ -58,6 +65,7 @@ async function shutdown(signal: string): Promise<void> {
 	log.info('shutting down', { signal });
 	ingestion.stop();
 	zuordnung.stop();
+	zeit.stop();
 	heartbeat.stop();
 	watchdog.stop();
 	await boss.stop({ graceful: true }).catch((err: unknown) => {

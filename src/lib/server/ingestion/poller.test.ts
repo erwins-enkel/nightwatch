@@ -128,6 +128,7 @@ describe('Delta-Runde', () => {
 			mails: 2,
 			deltaFolgeLink: null,
 			deltaToken: 'https://…/delta?$dt=A',
+			rundeAbgeschlossen: true,
 			lernfensterAbgeschlossen: true
 		});
 		expect(gespeichert.map((m) => m.graphMessageId)).toEqual(['m1', 'm2']);
@@ -162,7 +163,30 @@ describe('Delta-Runde', () => {
 			deltaFolgeLink: `https://graph/next-${SEITEN_PRO_LAUF}`,
 			deltaToken: null,
 			// Die Runde läuft noch — das Lernfenster ist erst mit dem deltaLink durch.
+			rundeAbgeschlossen: false,
 			lernfensterAbgeschlossen: false
+		});
+	});
+
+	/**
+	 * Der Fall, wegen dem `rundeAbgeschlossen` ein eigenes Feld ist (#26): ohne deltaLink *und* ohne
+	 * nextLink endet der Lauf mit denselben Link-Feldern wie eine abgeschlossene Runde — er trägt den
+	 * alten Token weiter. Aus den Links allein wäre Vollständigkeit hier nicht unterscheidbar, und
+	 * `ingestion_stand_am` darf sie nur behaupten, wo sie belegt ist.
+	 */
+	it('meldet eine Runde ohne deltaLink nicht als abgeschlossen', async () => {
+		const graph = fakeGraph([ok({ value: [nachricht('m1')] })]);
+
+		const ergebnis = await laufen({
+			postfach: postfach({ deltaToken: 'https://graph/delta-alt' }),
+			graph
+		});
+
+		expect(ergebnis).toMatchObject({
+			art: 'erfolg',
+			deltaFolgeLink: null,
+			deltaToken: 'https://graph/delta-alt',
+			rundeAbgeschlossen: false
 		});
 	});
 

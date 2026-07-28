@@ -1,4 +1,4 @@
-import type { Alarmgrund, Klassifikation, MonitorArt } from '../db/schema/enums';
+import type { Alarmgrund, ErholungsArt, Klassifikation, MonitorArt } from '../db/schema/enums';
 
 /**
  * The Monitor-Art's reading of one matching mail (CONTEXT „Dreiklang-Vertrag", „Muster-Slots").
@@ -13,8 +13,12 @@ import type { Alarmgrund, Klassifikation, MonitorArt } from '../db/schema/enums'
 export type Wirkung =
 	| { art: 'keine' }
 	| { art: 'stoerung'; grund: Alarmgrund }
-	/** Only ever evidence based here — a mail arrived and proved it (CONTEXT). */
-	| { art: 'erholung' };
+	/**
+	 * Defaults to `beweis` — every recovery a *mail* causes is evidence based by definition
+	 * (CONTEXT „Beweisbasierte Erholung"). The time scheduler (#26) is the one caller that says
+	 * otherwise: Auto-Zurück recovers on a timer, and only `beweis` may close a ticket (#27).
+	 */
+	| { art: 'erholung'; erholungsArt?: ErholungsArt };
 
 export interface MailWirkung {
 	/** What is recorded on the mail row; `null` for the Zähler, whose slots are unused. */
