@@ -87,6 +87,7 @@ export async function verarbeitePostfach(geclaimt: GeclaimtesPostfach, jetzt: Da
 			jetzt,
 			deltaToken: ergebnis.deltaToken,
 			deltaFolgeLink: ergebnis.deltaFolgeLink,
+			rundeAbgeschlossen: ergebnis.rundeAbgeschlossen,
 			lernfensterAbgeschlossen: ergebnis.lernfensterAbgeschlossen,
 			intervallSekunden: geclaimt.pollIntervallSekunden
 		});

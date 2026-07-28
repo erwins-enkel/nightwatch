@@ -209,6 +209,7 @@ describe.skipIf(!databaseUrl && !process.env.CI)('Ingestion-Persistenz', () => {
 					jetzt: new Date('2026-07-27T11:00:00Z'),
 					deltaToken: 'https://graph/delta-1',
 					deltaFolgeLink: null,
+					rundeAbgeschlossen: true,
 					lernfensterAbgeschlossen: true,
 					intervallSekunden: 120
 				},
@@ -306,6 +307,7 @@ describe.skipIf(!databaseUrl && !process.env.CI)('Ingestion-Persistenz', () => {
 					jetzt,
 					deltaToken: 'https://graph/delta-1',
 					deltaFolgeLink: null,
+					rundeAbgeschlossen: true,
 					lernfensterAbgeschlossen: true,
 					intervallSekunden: 120
 				},
@@ -337,6 +339,7 @@ describe.skipIf(!databaseUrl && !process.env.CI)('Ingestion-Persistenz', () => {
 					jetzt,
 					deltaToken: null,
 					deltaFolgeLink: 'https://graph/next-3',
+					rundeAbgeschlossen: false,
 					lernfensterAbgeschlossen: false,
 					intervallSekunden: 120
 				},
@@ -362,6 +365,7 @@ describe.skipIf(!databaseUrl && !process.env.CI)('Ingestion-Persistenz', () => {
 					jetzt: erfolgAm,
 					deltaToken: 'https://graph/delta-1',
 					deltaFolgeLink: null,
+					rundeAbgeschlossen: true,
 					lernfensterAbgeschlossen: true,
 					intervallSekunden: 120
 				},
@@ -402,6 +406,7 @@ describe.skipIf(!databaseUrl && !process.env.CI)('Ingestion-Persistenz', () => {
 					jetzt,
 					deltaToken: 'https://graph/delta-1',
 					deltaFolgeLink: null,
+					rundeAbgeschlossen: true,
 					lernfensterAbgeschlossen: true,
 					intervallSekunden: 120
 				},
@@ -426,6 +431,163 @@ describe.skipIf(!databaseUrl && !process.env.CI)('Ingestion-Persistenz', () => {
 				deltaFolgeLink: null,
 				lernfensterAbgeschlossenAm: jetzt
 			});
+		});
+	});
+
+	/**
+	 * Die Ingestions-Zusage (#26): `ingestion_stand_am` behauptet „jede Mail bis hierhin ist eine
+	 * Zeile". Der Zeit-Scheduler urteilt nicht darüber hinaus, also entscheidet diese Spalte, ob ein
+	 * Heartbeat überhaupt überfällig werden darf — sie wird hier geprüft, wo sie geschrieben wird,
+	 * und nicht über den Scheduler, der sie nur liest.
+	 */
+	describe('Vollständigkeits-Zusage', () => {
+		const stand = async (id: string) => {
+			const [zeile] = await db.select().from(schema.postfach).where(eq(schema.postfach.id, id));
+			return zeile;
+		};
+
+		/**
+		 * `ingestion_stand_am` steht per Default auf `now()` — ein frisches Postfach sagt über die
+		 * Vergangenheit nichts zu. Die Fälle unten spielen in fixierter Vergangenheit, also wird die
+		 * Ausgangs-Zusage mitfixiert; sonst gewönne der Default jedes `greatest`.
+		 */
+		const AUSGANGS_STAND = new Date('2026-07-27T00:00:00Z');
+
+		const claimUndRunde = async (id: string, begonnenAm: Date) => {
+			await db
+				.update(schema.postfach)
+				.set({ naechsterPollFruehestensAm: null, ingestionStandAm: AUSGANGS_STAND })
+				.where(eq(schema.postfach.id, id));
+			await claimFaellige(4, begonnenAm, db);
+		};
+
+		it('stempelt den Rundenbeginn beim Claim, der eine neue Runde startet', async () => {
+			const id = await neuesPostfach();
+			const begonnenAm = new Date('2026-07-27T12:00:00Z');
+
+			await claimUndRunde(id, begonnenAm);
+
+			expect((await stand(id)).rundeBegonnenAm).toEqual(begonnenAm);
+		});
+
+		it('behält den Rundenbeginn, während dieselbe Runde weiterpagt', async () => {
+			const id = await neuesPostfach();
+			const begonnenAm = new Date('2026-07-27T12:00:00Z');
+			await claimUndRunde(id, begonnenAm);
+
+			// Ein Lauf, der das Seiten-Budget ausschöpft, hinterlässt den nextLink …
+			await vermerkeErfolg(
+				{
+					postfachId: id,
+					jetzt: new Date('2026-07-27T12:00:30Z'),
+					deltaToken: null,
+					deltaFolgeLink: 'https://graph/next-2',
+					rundeAbgeschlossen: false,
+					lernfensterAbgeschlossen: false,
+					intervallSekunden: 120
+				},
+				db
+			);
+			// … und der nächste Claim setzt die Runde fort, statt eine neue zu beginnen.
+			await claimFaellige(4, new Date('2026-07-27T12:05:00Z'), db);
+
+			expect((await stand(id)).rundeBegonnenAm).toEqual(begonnenAm);
+		});
+
+		it('schiebt den Stand nur bei abgeschlossener Runde, und auf deren Beginn', async () => {
+			const id = await neuesPostfach();
+			const begonnenAm = new Date('2026-07-27T12:00:00Z');
+			await claimUndRunde(id, begonnenAm);
+			const vorher = (await stand(id)).ingestionStandAm;
+
+			await vermerkeErfolg(
+				{
+					postfachId: id,
+					jetzt: new Date('2026-07-27T12:00:30Z'),
+					deltaToken: null,
+					deltaFolgeLink: 'https://graph/next-2',
+					rundeAbgeschlossen: false,
+					lernfensterAbgeschlossen: false,
+					intervallSekunden: 120
+				},
+				db
+			);
+			expect((await stand(id)).ingestionStandAm).toEqual(vorher);
+
+			// Die Runde pagte zehn Minuten. Zugesagt wird trotzdem nur bis zu ihrem *Beginn* minus
+			// Sicherheitsspanne — über die zehn Minuten weiß sie nichts.
+			await vermerkeErfolg(
+				{
+					postfachId: id,
+					jetzt: new Date('2026-07-27T12:10:00Z'),
+					deltaToken: 'https://graph/delta-1',
+					deltaFolgeLink: null,
+					rundeAbgeschlossen: true,
+					lernfensterAbgeschlossen: true,
+					intervallSekunden: 120
+				},
+				db
+			);
+
+			expect((await stand(id)).ingestionStandAm).toEqual(new Date('2026-07-27T11:59:00Z'));
+		});
+
+		it('schiebt den Stand bei einem Fehlschlag nicht', async () => {
+			const id = await neuesPostfach();
+			await claimUndRunde(id, new Date('2026-07-27T12:00:00Z'));
+			const vorher = (await stand(id)).ingestionStandAm;
+
+			await vermerkeFehler(
+				{
+					postfachId: id,
+					jetzt: new Date('2026-07-27T12:00:30Z'),
+					fehler: { klasse: 'zugriff', code: 'ErrorAccessDenied', text: 'Access is denied.' },
+					wartenMs: 120_000,
+					deltaZuruecksetzen: false
+				},
+				db
+			);
+
+			expect((await stand(id)).ingestionStandAm).toEqual(vorher);
+		});
+
+		it('nimmt eine einmal gegebene Zusage nicht zurück', async () => {
+			// Ein `410 Gone` wirft den Delta-Zustand weg; die folgende Runde beginnt früher als die
+			// letzte zugesagte Grenze. Zurückwandern dürfte der Stand deshalb trotzdem nicht — sonst
+			// würde eine Zusage widerrufen, auf die der Scheduler schon geurteilt hat.
+			const id = await neuesPostfach();
+			await claimUndRunde(id, new Date('2026-07-27T12:00:00Z'));
+			await vermerkeErfolg(
+				{
+					postfachId: id,
+					jetzt: new Date('2026-07-27T12:00:30Z'),
+					deltaToken: 'https://graph/delta-1',
+					deltaFolgeLink: null,
+					rundeAbgeschlossen: true,
+					lernfensterAbgeschlossen: true,
+					intervallSekunden: 120
+				},
+				db
+			);
+
+			await db
+				.update(schema.postfach)
+				.set({ rundeBegonnenAm: new Date('2026-07-27T09:00:00Z') })
+				.where(eq(schema.postfach.id, id));
+			await vermerkeErfolg(
+				{
+					postfachId: id,
+					jetzt: new Date('2026-07-27T12:30:00Z'),
+					deltaToken: 'https://graph/delta-2',
+					deltaFolgeLink: null,
+					rundeAbgeschlossen: true,
+					lernfensterAbgeschlossen: false,
+					intervallSekunden: 120
+				},
+				db
+			);
+
+			expect((await stand(id)).ingestionStandAm).toEqual(new Date('2026-07-27T11:59:00Z'));
 		});
 	});
 

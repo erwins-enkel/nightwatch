@@ -9,6 +9,16 @@ import type { PollPostfach } from './poller';
 
 type Db = ReturnType<typeof getDb>;
 
+/**
+ * How far `ingestion_stand_am` is pulled back behind the round's start (#26).
+ *
+ * Graph's delta index is eventually consistent: a message can surface a few seconds after its
+ * `receivedDateTime`, so a round that began at T has *not* strictly delivered everything up to T.
+ * This margin is the one remaining piece of slack in the completeness promise — named here rather
+ * than assumed silently, and small enough to disappear inside any sensible Karenz.
+ */
+export const INGESTION_SICHERHEITSSPANNE_SEKUNDEN = 60;
+
 /** What `claimFaellige` returns: the poller's view plus the credentials the Graph port needs. */
 export type GeclaimtesPostfach = PollPostfach & {
 	tenantId: string;
@@ -64,6 +74,12 @@ function alsDatum(wert: string | Date | null): Date | null {
  *
  * The `::timestamptz` cast is load-bearing as well: without it Postgres infers the bound
  * parameter's type from the `+ interval` operand and rejects it as an interval.
+ *
+ * The claim is also where a delta round gets its start time (#26). A run that resumes a paging
+ * round (`delta_folge_link` set) continues the round it is in and keeps `runde_begonnen_am`; only a
+ * run that starts a fresh one stamps it. That timestamp — not the moment the round finishes — is
+ * what a settled round proves completeness up to, which is why it has to be captured here rather
+ * than derived in `vermerkeErfolg`.
  */
 export async function claimFaellige(
 	anzahl: number,
@@ -82,7 +98,11 @@ export async function claimFaellige(
 		)
 		update ${postfach}
 		set naechster_poll_fruehestens_am =
-			${jetzt}::timestamptz + make_interval(secs => ${postfach.pollIntervallSekunden})
+			${jetzt}::timestamptz + make_interval(secs => ${postfach.pollIntervallSekunden}),
+			runde_begonnen_am = case
+				when ${postfach.deltaFolgeLink} is null then ${jetzt}::timestamptz
+				else ${postfach.rundeBegonnenAm}
+			end
 		from faellig
 		where ${postfach.id} = faellig.id
 		returning
@@ -152,6 +172,8 @@ export interface ErfolgEingabe {
 	jetzt: Date;
 	deltaToken: string | null;
 	deltaFolgeLink: string | null;
+	/** Graph closed the round with an `@odata.deltaLink` — the completeness proof. */
+	rundeAbgeschlossen: boolean;
 	lernfensterAbgeschlossen: boolean;
 	intervallSekunden: number;
 }
@@ -161,6 +183,18 @@ export interface ErfolgEingabe {
  *
  * A round that is still paging becomes due immediately rather than after the poll interval —
  * otherwise a 200-page backfill would take 200 intervals to drain.
+ *
+ * A round that **settled** additionally renews the completeness promise the time scheduler judges
+ * against (#26). Three properties make that promise worth something:
+ *
+ * - It moves only on `rundeAbgeschlossen`. A paging round has delivered a prefix, not everything.
+ * - It moves to the round's *start* minus the safety margin, never to `jetzt` — a round that paged
+ *   for ten minutes says nothing about the mail that arrived during those ten minutes.
+ * - `greatest` keeps it monotone, so the hour of overlap a `410 Gone` resync re-reads cannot
+ *   withdraw a promise that was already made.
+ *
+ * The mails themselves are committed page by page *before* this runs (`poller.ts`), which is the
+ * ordering the scheduler relies on: whoever sees the new promise also sees its mails.
  */
 export async function vermerkeErfolg(eingabe: ErfolgEingabe, db: Db = getDb()): Promise<void> {
 	const { jetzt, deltaFolgeLink } = eingabe;
@@ -179,6 +213,11 @@ export async function vermerkeErfolg(eingabe: ErfolgEingabe, db: Db = getDb()): 
 			letzterFehlerAm: null,
 			fehlerInFolge: 0,
 			naechsterPollFruehestensAm: naechster,
+			...(eingabe.rundeAbgeschlossen
+				? {
+						ingestionStandAm: sql`greatest(${postfach.ingestionStandAm}, ${postfach.rundeBegonnenAm} - make_interval(secs => ${INGESTION_SICHERHEITSSPANNE_SEKUNDEN}))`
+					}
+				: {}),
 			...(eingabe.lernfensterAbgeschlossen ? { lernfensterAbgeschlossenAm: jetzt } : {})
 		})
 		.where(eq(postfach.id, eingabe.postfachId));

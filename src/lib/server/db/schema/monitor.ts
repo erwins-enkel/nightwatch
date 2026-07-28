@@ -119,6 +119,21 @@ export const monitor = pgTable(
 		 * state, and the max open time runs from the *first* Auf (CONTEXT „Paar-Monitor").
 		 */
 		paarOffenSeit: timestamp('paar_offen_seit', { withTimezone: true }),
+		/**
+		 * How far the time-based evaluation has judged this monitor's Soll-Zeitpunkte (#26).
+		 *
+		 * Read by the Kalenderplan, the one Erwartung with discrete due times. Unlike `anlauf` this
+		 * is *not* a materialised derivation: `zuletzt_gesehen_am` knows only the last mail, so
+		 * after a standstill nothing else in the row can still say whether the Soll of two days ago
+		 * was covered. A missed Soll would be silently forgiven — the exact blind spot Nightwatch
+		 * exists to close.
+		 *
+		 * It is also what makes „ausgesetzt, nicht verworfen" literal: while the evaluation is
+		 * suspended (Bewertungs-Schranke, Ingestion-Gate) this cursor stays put, so the same Soll is
+		 * offered again once ingestion and assignment have caught up. Set to *now* on activation and
+		 * on a rule change, and never moved backwards — a Soll is judged exactly once.
+		 */
+		sollGeprueftBisAm: timestamp('soll_geprueft_bis_am', { withTimezone: true }),
 
 		erstelltAm: timestamp('erstellt_am', { withTimezone: true }).notNull().defaultNow()
 	},

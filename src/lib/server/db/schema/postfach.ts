@@ -39,6 +39,34 @@ export const postfach = pgTable('postfach', {
 	 */
 	deltaFolgeLink: text('delta_folge_link'),
 	letzterErfolgreicherPoll: timestamp('letzter_erfolgreicher_poll', { withTimezone: true }),
+	/**
+	 * When the delta round that is currently running began. Set by the claim that starts a *fresh*
+	 * round, kept while the round pages across several runs.
+	 *
+	 * Only interesting as the raw material of `ingestion_stand_am` below — a round that settles has
+	 * delivered everything that existed at its **beginning**, not at its end.
+	 */
+	rundeBegonnenAm: timestamp('runde_begonnen_am', { withTimezone: true }),
+	/**
+	 * The completeness promise (#26): every mail of this mailbox with
+	 * `ankunftszeit <= ingestion_stand_am` is present as a row.
+	 *
+	 * The time scheduler judges nothing beyond the earliest promise across all active mailboxes.
+	 * Without it, a monitor could be declared overdue at 06:00 while the 05:58 report is still
+	 * sitting in Graph, unfetched — a false alarm the mail could never take back, because it would
+	 * arrive as an Entwarnung after the ticket was already created.
+	 *
+	 * It may therefore only advance where completeness is *provable*: when a delta round settles
+	 * (Graph returns `@odata.deltaLink`), and then only to that round's start minus a safety margin
+	 * for Graph's eventually consistent delta index. A failed round advances nothing, which
+	 * suspends the time evaluation for as long as ingestion is demonstrably broken — CONTEXT
+	 * „Ingestion-Gate", derived from data rather than from a state machine.
+	 *
+	 * Defaults to *now* rather than to the epoch: a fresh mailbox promises nothing about the past,
+	 * and an epoch default would freeze every other mailbox's monitors until its first round
+	 * settled.
+	 */
+	ingestionStandAm: timestamp('ingestion_stand_am', { withTimezone: true }).notNull().defaultNow(),
 	letzterFehlerCode: text('letzter_fehler_code'),
 	letzterFehlerText: text('letzter_fehler_text'),
 	letzterFehlerAm: timestamp('letzter_fehler_am', { withTimezone: true }),
