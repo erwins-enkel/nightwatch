@@ -180,7 +180,10 @@ Fundus bauen, ohne dass Daten das Haus verlassen.
 **Match-Kriterien**:
 Die Merkmale, mit denen ein Monitor „seine" Mails erkennt: Absender, Betreff-Muster, Schlüsselwörter.
 Wirken erst **nach** der Kunden-Zuordnung, nur innerhalb der Monitore des erkannten Kunden — die
-Unterscheidung der Kunden ist Sache der **Zuordnungs-Merkmale**, nicht der Match-Kriterien.
+Unterscheidung der Kunden ist Sache der **Zuordnungs-Merkmale**, nicht der Match-Kriterien. Eine Mail
+gehört **genau einem** Monitor; treffen mehrere Monitore desselben Kunden, gewinnt der **ältere** —
+kein Scoring, dieselbe Haltung wie bei den Zuordnungs-Merkmalen. Eine Regel ohne jedes Kriterium ist
+keine Regel: sie würde jede Mail ihres Kunden schlucken und alle anderen Monitore aushungern.
 
 **Muster-Slots**:
 Die zwei generischen Muster-Felder jeder Regel — ein Schlecht- und ein Gut-Signal —, die jede
@@ -315,7 +318,10 @@ Grund-Wechsel während `Gestört` → **Verschärfung**.
 **Pausiert**:
 Eine Überlagerung der 2-Zustands-Maschine (orthogonal: aktiv/pausiert) für geplante Wartung.
 Während `Pausiert` feuert keine Schlecht-Bedingung und kein Alarm; optional mit Auto-Ende. Fürs
-Dashboard sichtbar verschieden von „aus" und von `Gestört`.
+Dashboard sichtbar verschieden von „aus" und von `Gestört`. Unterdrückt wird nur die
+**Schlecht-Richtung**, nicht die Beobachtung: zuletzt gesehen, offener Paar-Zustand und
+Klassifikation laufen weiter, und eine **Erholung** wirkt auch während der Pause — eine Wartung darf
+einen Monitor nicht dauerhaft gestört zurücklassen.
 
 ### Alarm-Lebenszyklus
 

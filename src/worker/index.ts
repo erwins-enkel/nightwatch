@@ -14,6 +14,7 @@ import { closePool } from '../lib/server/db/client';
 import { createQueueClient, PGBOSS_SCHEMA } from '../lib/server/queue';
 import { startIngestionScheduler } from '../lib/server/ingestion/scheduler';
 import { startZuordnungScheduler } from '../lib/server/zuordnung/scheduler';
+import { monitorStufe } from '../lib/server/monitor/pipeline';
 
 const log = createLogger('worker');
 
@@ -41,10 +42,11 @@ const heartbeat = startHeartbeat({
 const ingestion = startIngestionScheduler({ tickMs: env.ingestionTickMs });
 log.info('ingestion scheduler started', { tickMs: env.ingestionTickMs });
 
-// Stage 1 of the assignment pipeline (SPEC §4). Separate from the ingestion loop on purpose: the
-// queue is `mail.verarbeitet_am is null`, so a backfill drains by itself and a new
-// Zuordnungs-Merkmal can send unassigned mails back through with a single UPDATE.
-const zuordnung = startZuordnungScheduler({ tickMs: env.zuordnungTickMs });
+// The assignment pipeline (SPEC §4). Separate from the ingestion loop on purpose: the queue is
+// `mail.verarbeitet_am is null`, so a backfill drains by itself and a new Zuordnungs-Merkmal can
+// send unassigned mails back through with a single UPDATE. Stage 2 — Kunde → Monitor and the
+// mail-triggered state machine (SPEC §5–6) — is handed in here.
+const zuordnung = startZuordnungScheduler({ tickMs: env.zuordnungTickMs, monitorStufe });
 log.info('zuordnung scheduler started', { tickMs: env.zuordnungTickMs });
 
 log.info('worker ready', { version: env.appVersion });
