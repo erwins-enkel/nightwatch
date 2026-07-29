@@ -151,7 +151,18 @@ which must alarm on its own:
    source.
 
 The "Nightwatch itself is degraded" signal is delivered over a channel **independent of the
-mail pipeline** (since the mail pipeline may be exactly what is broken). See
+mail pipeline** (since the mail pipeline may be exactly what is broken).
+
+Concretely, Nightwatch runs built-in system monitors — one per mailbox plus a global
+"Nightwatch-Kern" — with the same state machine and alarm lifecycle as any customer monitor. The
+`watchdog` service evaluates them and sends their alarms on its own path, without the worker or the
+job queue, backed by a local encrypted cache so that a **database outage** can still be reported.
+While a mailbox's ingestion is provably broken, overdue decisions for its monitors are *suspended
+rather than taken*, so a Graph outage produces one self-alarm instead of a ticket per customer. And
+an opt-in outgoing **heartbeat ping** covers the one failure no process of a dead instance could
+report itself: the total outage.
+
+See [`docs/self-monitoring.md`](docs/self-monitoring.md), plus
 [issue #11](https://github.com/erwins-enkel/nightwatch/issues/11) and
 [issue #12](https://github.com/erwins-enkel/nightwatch/issues/12).
 
@@ -450,11 +461,13 @@ truth for product and architecture decisions.
 │   ├── routes/                     # SvelteKit dashboard, mailbox settings, /health
 │   ├── lib/server/                 # Shared server code (env, logger, db, heartbeat, watchdog)
 │   │   ├── graph/                  # Microsoft Graph: MSAL tokens, delta calls, error classes
-│   │   └── ingestion/              # Delta poll loop, backoff, mailbox persistence
+│   │   ├── ingestion/              # Delta poll loop, backoff, mailbox persistence
+│   │   └── selbst/                 # Self-monitors, watchdog path, ingestion gate, ping
 │   ├── worker/                     # Worker entrypoint — Bun runs it straight from source
 │   └── watchdog/                   # Watchdog entrypoint
 └── docs/
     ├── datenmodell.md               # Entities, invariants and the decisions behind them
+    ├── self-monitoring.md           # Self-monitors, watchdog send path, ingestion gate, ping
     ├── webhook.md                   # Webhook payload, HMAC signature, delivery semantics
     └── research/
         ├── m365-graph-ingestion.md # Ingestion: Graph delta-query, app model, scoping, self-monitoring

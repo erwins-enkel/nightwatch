@@ -1,18 +1,18 @@
 /**
  * Watchdog entrypoint — deliberately tiny (SPEC §2).
  *
- * Its job in v1 is to aggregate the Postgres heartbeats, evaluate the self-monitors and send
- * self-alarms on its own path, without worker or pg-boss. The scaffold covers the aggregation
- * and reports what it sees; the evaluation and the sending path belong to the self-monitoring
- * milestone. It never depends on pg-boss, so a broken queue cannot silence the watchdog.
+ * It aggregates the Postgres heartbeats, evaluates the self-monitors and sends self-alarms on its
+ * own path, without worker or pg-boss (SPEC §8). That independence is the point: a self-monitor that
+ * needed a healthy queue in order to report a broken queue would report nothing, and one that needed
+ * a reachable database in order to report an unreachable database would be worse than nothing.
  */
 import { env } from '../lib/server/env';
 import { createLogger, describeError } from '../lib/server/logger';
 import { startHeartbeat } from '../lib/server/heartbeat';
 import { startWatchdogTimer } from '../lib/server/watchdog-timer';
-import { readHeartbeats, writeHeartbeat } from '../lib/server/db/heartbeat';
+import { writeHeartbeat } from '../lib/server/db/heartbeat';
 import { closePool } from '../lib/server/db/client';
-import { evaluateHealth } from '../lib/server/health';
+import { startSelbstScheduler } from '../lib/server/selbst/scheduler';
 
 const log = createLogger('watchdog');
 
@@ -22,34 +22,34 @@ const watchdog = startWatchdogTimer({
 	livenessFile: env.livenessFile
 });
 
-async function tick(): Promise<void> {
-	await writeHeartbeat('watchdog');
-	const report = evaluateHealth({
-		rows: await readHeartbeats(),
-		now: new Date(),
-		staleAfterMs: env.heartbeatStaleAfterMs,
-		version: env.appVersion,
-		databaseReachable: true
-	});
-	const stale = report.services.filter((service) => service.stale).map((service) => service.dienst);
-	if (stale.length > 0) log.warn('services are not reporting in', { stale });
-	else log.debug('all services reporting in');
-}
-
+/**
+ * The watchdog's own heartbeat, on its own timer.
+ *
+ * Kept apart from the self-monitoring loop on purpose: petting the in-process watchdog timer must
+ * not depend on how long an evaluation takes, and a failed write says nothing about whether *this*
+ * process is alive. The self-monitoring loop draws its own conclusion about the database.
+ */
 const heartbeat = startHeartbeat({
 	intervalMs: env.heartbeatIntervalMs,
-	write: tick,
+	write: () => writeHeartbeat('watchdog'),
 	onTick: () => watchdog.pet(),
-	onError: (err) => log.warn('heartbeat tick failed', { error: describeError(err) })
+	onError: (err) => log.warn('heartbeat write failed', { error: describeError(err) })
 });
 
-log.info('watchdog ready', { version: env.appVersion });
+const selbst = startSelbstScheduler({ tickMs: env.selbstTickMs });
+
+log.info('watchdog ready', {
+	version: env.appVersion,
+	tickMs: env.selbstTickMs,
+	cache: env.watchdogCacheFile
+});
 
 let shuttingDown = false;
 async function shutdown(signal: string): Promise<void> {
 	if (shuttingDown) return;
 	shuttingDown = true;
 	log.info('shutting down', { signal });
+	selbst.stop();
 	heartbeat.stop();
 	watchdog.stop();
 	await closePool().catch(() => {});

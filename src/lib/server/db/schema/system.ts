@@ -112,6 +112,16 @@ export interface AutotaskTicketDefaults {
 	 * supplies one, so this is set by default; clearing it omits the field entirely.
 	 */
 	faelligkeitStunden?: number;
+	/**
+	 * The company a **self-monitor** ticket is filed under (SPEC §8).
+	 *
+	 * A self-monitor „gehört keinem Kunden; wohin sein Ticket geht, ist reine Transport-Konfiguration"
+	 * (CONTEXT) — but Autotask requires a `companyID` on every ticket, so the operator has to name
+	 * one. Deliberately outside `istEinsatzbereit()`: without it Nightwatch simply does not plan an
+	 * Autotask delivery for self-alarms, and they travel by webhook — exactly like a customer without
+	 * an Autotask-Verknüpfung.
+	 */
+	selbstCompanyId?: number;
 }
 
 /**
@@ -144,6 +154,12 @@ export const einstellungen = pgTable(
 		heartbeatPingIntervallSekunden: integer('heartbeat_ping_intervall_sekunden')
 			.notNull()
 			.default(300),
+		/**
+		 * When a ping last reached its receiver. Doubles as the schedule — the next one is due an
+		 * interval after it — and as what the dashboard shows: „opted in" and „actually arriving" are
+		 * different statements, and only the second one is worth anything.
+		 */
+		heartbeatPingZuletztAm: timestamp('heartbeat_ping_zuletzt_am', { withTimezone: true }),
 
 		// --- Autotask (SPEC §7) ---
 		autotaskAktiv: boolean('autotask_aktiv').notNull().default(false),

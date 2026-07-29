@@ -81,6 +81,21 @@ export const env = {
 	 */
 	alarmTickMs: positiveSeconds('ALARM_TICK_SECONDS', process.env.ALARM_TICK_SECONDS, 10),
 	/**
+	 * How often the watchdog evaluates the self-monitors, sends what they owe and pings outwards.
+	 *
+	 * Coarser than the alarm loop because every window it judges is measured in minutes — the shortest
+	 * sensible Staleness is a multiple of a poll interval. It also bounds how quickly a database
+	 * outage is noticed, but only after the Staleness window has passed anyway.
+	 */
+	selbstTickMs: positiveSeconds('SELBST_TICK_SECONDS', process.env.SELBST_TICK_SECONDS, 30),
+	/**
+	 * The watchdog's encrypted config and dedup cache (SPEC §8). Must live on a **volume**: it is
+	 * what lets a self-alarm about an unreachable database go out at all, and it is what keeps a
+	 * restart from announcing that same outage a second time.
+	 */
+	watchdogCacheFile:
+		process.env.WATCHDOG_CACHE_FILE?.trim() || '/var/lib/nightwatch/watchdog-cache.enc',
+	/**
 	 * Public origin of the dashboard — the same value SvelteKit needs for form actions, and the
 	 * base of every Rückverweis deep link an alarm carries (CONTEXT). The worker builds those, so
 	 * it is read here rather than from `$app/environment`.

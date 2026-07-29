@@ -210,6 +210,7 @@ export async function vermerkeErfolg(eingabe: ErfolgEingabe, db: Db = getDb()): 
 			letzterErfolgreicherPoll: jetzt,
 			letzterFehlerCode: null,
 			letzterFehlerText: null,
+			letzterFehlerKlasse: null,
 			letzterFehlerAm: null,
 			fehlerInFolge: 0,
 			naechsterPollFruehestensAm: naechster,
@@ -236,6 +237,9 @@ export interface FehlerEingabe {
  *
  * `letzter_erfolgreicher_poll` is deliberately left alone — it is the staleness signal the mailbox
  * self-monitor reads (#30), and a failure must not look like activity.
+ *
+ * The classification travels with the code, so the self-monitor can tell a „harte Ursache" from a
+ * passing blip (SPEC §8) without classifying HTTP status codes a second time.
  */
 export async function vermerkeFehler(eingabe: FehlerEingabe, db: Db = getDb()): Promise<void> {
 	await db
@@ -243,6 +247,7 @@ export async function vermerkeFehler(eingabe: FehlerEingabe, db: Db = getDb()): 
 		.set({
 			letzterFehlerCode: eingabe.fehler.code,
 			letzterFehlerText: eingabe.fehler.text,
+			letzterFehlerKlasse: eingabe.fehler.klasse,
 			letzterFehlerAm: eingabe.jetzt,
 			fehlerInFolge: sql`${postfach.fehlerInFolge} + 1`,
 			naechsterPollFruehestensAm: new Date(eingabe.jetzt.getTime() + eingabe.wartenMs),

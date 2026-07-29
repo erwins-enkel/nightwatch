@@ -76,6 +76,13 @@
 			hinweis: m.autotask_due_hours_hint(),
 			werte: null as PicklistWert[] | null,
 			wert: data.defaults.faelligkeitStunden
+		},
+		{
+			name: 'selbstCompanyId',
+			label: m.autotask_self_company(),
+			hinweis: m.autotask_self_company_hint(),
+			werte: null as PicklistWert[] | null,
+			wert: data.defaults.selbstCompanyId
 		}
 	]);
 

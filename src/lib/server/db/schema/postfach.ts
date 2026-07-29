@@ -1,4 +1,5 @@
 import { boolean, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import type { FehlerKlasse } from '../../graph/fehler';
 
 /**
  * A monitored mailbox and its Graph connection (SPEC §3, §10).
@@ -75,6 +76,18 @@ export const postfach = pgTable('postfach', {
 	ingestionStandAm: timestamp('ingestion_stand_am', { withTimezone: true }),
 	letzterFehlerCode: text('letzter_fehler_code'),
 	letzterFehlerText: text('letzter_fehler_text'),
+	/**
+	 * The classification `graph/fehler.ts` already made, persisted rather than re-derived.
+	 *
+	 * SPEC §8 lets „harte Ursachen" (`zugriff`, `nicht_gefunden` — entzogener Consent, `AADSTS*`,
+	 * 403) accelerate the mailbox self-monitor instead of waiting out its staleness window. The
+	 * decision which code means what belongs to one module; re-reading `letzter_fehler_code` in the
+	 * watchdog would be a second classifier, drifting from the first the moment Graph adds a code.
+	 *
+	 * Plain `text`, not an enum: this is a technical classification of someone else's API, not a
+	 * term from CONTEXT.md — and it may gain a value without deserving a migration.
+	 */
+	letzterFehlerKlasse: text('letzter_fehler_klasse').$type<FehlerKlasse>(),
 	letzterFehlerAm: timestamp('letzter_fehler_am', { withTimezone: true }),
 	pollIntervallSekunden: integer('poll_intervall_sekunden').notNull().default(120),
 

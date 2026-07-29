@@ -11,7 +11,8 @@ import {
 	letzteTicketNummer,
 	merkeKommentar,
 	merkeSchliessung,
-	merkeTicket
+	merkeTicket,
+	type KorrelationsAnker
 } from './db';
 import { AutotaskZustellFehler, klassifiziereAntwort, klassifiziereAusnahme } from './fehler';
 import { externId, istUnberuehrt, notizFuer, notizKoerper, ticketKoerper } from './ticket';
@@ -108,7 +109,8 @@ interface Umgebung {
 	port: AutotaskPort;
 	konfig: AutotaskTicketDefaults;
 	daten: AlarmEreignisDaten;
-	monitorId: string;
+	/** Customer monitor or self-monitor — the ticket state machine below reads no difference. */
+	anker: KorrelationsAnker;
 	companyId: number;
 	uebergangId: string;
 	jetzt: Date;
@@ -117,11 +119,11 @@ interface Umgebung {
 
 /** „Sorge dafür, dass für diesen Monitor ein offenes Ticket existiert" (CONTEXT „Alarmweg"). */
 async function eroeffne(umgebung: Umgebung): Promise<void> {
-	const { port, konfig, daten, monitorId, db, jetzt } = umgebung;
+	const { port, konfig, daten, anker, db, jetzt } = umgebung;
 
 	// SPEC §6, "ein offenes Ticket pro Monitor": a ticket outlives its episode, so a re-alarm
 	// comments the open one instead of opening a second.
-	const offene = await holeOffeneKorrelation(monitorId, db);
+	const offene = await holeOffeneKorrelation(anker, db);
 	if (offene?.ticketId) {
 		await schreibeNotiz(port, offene.ticketId, daten, konfig);
 		await merkeKommentar(offene.id, jetzt, db);
@@ -148,7 +150,7 @@ async function eroeffne(umgebung: Umgebung): Promise<void> {
 				konfig,
 				companyId: umgebung.companyId,
 				externId: extern,
-				vorgaengerTicket: await letzteTicketNummer(monitorId, db),
+				vorgaengerTicket: await letzteTicketNummer(anker, db),
 				jetzt
 			})
 		);
@@ -171,7 +173,7 @@ async function eroeffne(umgebung: Umgebung): Promise<void> {
 
 	await merkeTicket(
 		{
-			monitorId,
+			anker,
 			uebergangId: umgebung.uebergangId,
 			korrelationsKey: daten.korrelationsKey,
 			ticketId,
@@ -186,13 +188,13 @@ async function eroeffne(umgebung: Umgebung): Promise<void> {
 
 /** Verschärfung, and every Entwarnung that is not allowed to close (CONTEXT). */
 async function kommentiere(umgebung: Umgebung): Promise<boolean> {
-	const { port, konfig, daten, monitorId, db, jetzt } = umgebung;
+	const { port, konfig, daten, anker, db, jetzt } = umgebung;
 
-	const offene = await holeOffeneKorrelation(monitorId, db);
+	const offene = await holeOffeneKorrelation(anker, db);
 	if (!offene?.ticketId) {
 		// Somebody closed the ticket in Autotask; there is nothing left to comment on, and opening a
 		// new ticket just to say "it recovered" would be noise.
-		log.info('Kein offenes Ticket zum Kommentieren', { monitorId, ereignis: daten.ereignis });
+		log.info('Kein offenes Ticket zum Kommentieren', { ...anker, ereignis: daten.ereignis });
 		return false;
 	}
 
@@ -210,11 +212,11 @@ async function kommentiere(umgebung: Umgebung): Promise<boolean> {
  * all-clear is a defect.
  */
 async function schliesse(umgebung: Umgebung): Promise<void> {
-	const { port, konfig, daten, monitorId, db, jetzt } = umgebung;
+	const { port, konfig, daten, anker, db, jetzt } = umgebung;
 
-	const offene = await holeOffeneKorrelation(monitorId, db);
+	const offene = await holeOffeneKorrelation(anker, db);
 	if (!offene?.ticketId) {
-		log.info('Kein offenes Ticket zum Schließen', { monitorId });
+		log.info('Kein offenes Ticket zum Schließen', { ...anker });
 		return;
 	}
 
@@ -222,7 +224,7 @@ async function schliesse(umgebung: Umgebung): Promise<void> {
 	await merkeKommentar(offene.id, jetzt, db);
 
 	if (konfig.abschlussStatusId === undefined) {
-		log.info('Kein Abschluss-Status konfiguriert — Ticket bleibt offen', { monitorId });
+		log.info('Kein Abschluss-Status konfiguriert — Ticket bleibt offen', { ...anker });
 		return;
 	}
 
@@ -271,13 +273,24 @@ export async function fuehreAus(optionen: AblaufOptionen): Promise<void> {
 
 	const daten = baueEreignis(auftrag.episode, auftrag.ereignis, optionen.basisUrl ?? env.basisUrl);
 
-	// Self-monitor events travel the watchdog's own path (SPEC §8, #30) and never reach this queue;
-	// their correlation hangs off `selbst_monitor_id`, so treating one here would break the FK.
-	const companyId = daten.kunde ? await companyIdFuerKunde(daten.kunde.id, db) : null;
-	if (daten.monitor.art === 'selbst' || companyId === null) {
-		// The link was removed after the event was planned — the operator said this customer no
-		// longer goes to Autotask. Nothing is owed; releasing the chain is the correct outcome.
-		log.info('Zustellung übersprungen', { zustellungId, alertId: daten.alertId });
+	/**
+	 * Which company the ticket is filed under, and under which anchor it is remembered.
+	 *
+	 * A self-monitor „gehört keinem Kunden" (CONTEXT), so its ticket goes to the company the operator
+	 * nominated for exactly this purpose. Both branches can legitimately come up empty — a customer
+	 * whose Autotask-Verknüpfung was removed, an instance that never named a self-monitor company —
+	 * and both mean the same thing: this event does not go to Autotask.
+	 */
+	const selbst = daten.monitor.art === 'selbst';
+	const companyId = selbst
+		? (optionen.konfig.selbstCompanyId ?? null)
+		: daten.kunde
+			? await companyIdFuerKunde(daten.kunde.id, db)
+			: null;
+
+	if (companyId === null) {
+		// Nothing is owed; marking it delivered is what releases the target's chain.
+		log.info('Zustellung übersprungen', { zustellungId, alertId: daten.alertId, selbst });
 		await vermerkeZustellung(zustellungId, 'zugestellt', jetzt, null, db);
 		return;
 	}
@@ -287,7 +300,7 @@ export async function fuehreAus(optionen: AblaufOptionen): Promise<void> {
 			port: optionen.port,
 			konfig: optionen.konfig,
 			daten,
-			monitorId: daten.monitor.id,
+			anker: selbst ? { selbstMonitorId: daten.monitor.id } : { monitorId: daten.monitor.id },
 			companyId,
 			uebergangId: auftrag.uebergangId,
 			jetzt,

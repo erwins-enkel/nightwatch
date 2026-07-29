@@ -15,6 +15,7 @@ import { createQueueClient, PGBOSS_SCHEMA } from '../lib/server/queue';
 import { startIngestionScheduler } from '../lib/server/ingestion/scheduler';
 import { startZuordnungScheduler } from '../lib/server/zuordnung/scheduler';
 import { startZeitScheduler } from '../lib/server/zeit/scheduler';
+import { selbstGate } from '../lib/server/selbst/gate';
 import { startAlarmScheduler } from '../lib/server/alarm/scheduler';
 import { registriereAlarmweg } from '../lib/server/alarm/wege';
 import { autotaskWeg } from '../lib/server/autotask/weg';
@@ -59,7 +60,10 @@ log.info('zuordnung scheduler started', { tickMs: env.zuordnungTickMs });
 // The time-triggered half of the Dreiklang-Vertrag (SPEC §5–6) — the Dead-Man's-Switch itself.
 // Until this loop runs, only an arriving mail can move a monitor, so the one thing Nightwatch
 // exists for (nothing arrived) could never be noticed.
-const zeit = startZeitScheduler({ tickMs: env.zeitTickMs });
+// The Ingestion-Gate (SPEC §8) rides along: while a mailbox's ingestion is demonstrably broken, its
+// monitors' overdue decisions are suspended rather than taken and later regretted. Without it a
+// two-hour Graph outage would end in one false ticket per monitor.
+const zeit = startZeitScheduler({ tickMs: env.zeitTickMs, gate: selbstGate });
 log.info('zeit scheduler started', { tickMs: env.zeitTickMs });
 
 // The Autotask channel (SPEC §7). Registered *before* the publisher starts, so the very first tick

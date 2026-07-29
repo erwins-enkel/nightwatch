@@ -642,7 +642,7 @@ describe.skipIf(!databaseUrl && !process.env.CI)('Alarm-Lebenszyklus', () => {
 			expect((await zustellungen()).length).toBeGreaterThan(3);
 
 			// Zwei Ziele, zwei Köpfe — der flatternde Monitor belegt einen Platz, nicht das Fenster.
-			const koepfe = await ladeOffeneZustellungen(2, db);
+			const koepfe = await ladeOffeneZustellungen(2, 'kunde', db);
 			const monitore = koepfe.map((kopf) => kopf.episode.monitor.id);
 			expect(monitore).toContain(flatternd);
 			expect(monitore).toContain(ruhig);
@@ -751,7 +751,7 @@ describe.skipIf(!databaseUrl && !process.env.CI)('Alarm-Lebenszyklus', () => {
 			await legeEpisodeAn(ersterId, T('06:00'));
 			await legeEpisodeAn(zweiterId, T('06:10'));
 
-			const koepfe = await ladeOffeneZustellungen(10, db);
+			const koepfe = await ladeOffeneZustellungen(10, 'selbst', db);
 
 			expect(koepfe.map((kopf) => kopf.episode.monitor.id).sort()).toEqual(
 				[ersterId, zweiterId].sort()
@@ -769,7 +769,7 @@ describe.skipIf(!databaseUrl && !process.env.CI)('Alarm-Lebenszyklus', () => {
 			});
 			await legeEpisodeAn(selbstId, T('06:10'));
 
-			const gebremst = await ladeOffeneZustellungen(10, db);
+			const gebremst = await ladeOffeneZustellungen(10, 'selbst', db);
 			expect(gebremst.map((kopf) => kopf.id)).toEqual([aeltere.zustellungId]);
 
 			// Erst als die ältere nichts mehr schuldet, rückt die jüngere nach.
@@ -779,7 +779,7 @@ describe.skipIf(!databaseUrl && !process.env.CI)('Alarm-Lebenszyklus', () => {
 				.where(eq(schema.uebergang.id, aeltere.uebergangId));
 			await vermerkeZustellung(aeltere.zustellungId, 'zugestellt', T('06:21'), null, db);
 
-			const frei = await ladeOffeneZustellungen(10, db);
+			const frei = await ladeOffeneZustellungen(10, 'selbst', db);
 			expect(frei.length).toBe(1);
 			expect(frei[0].id).not.toBe(aeltere.zustellungId);
 		});

@@ -4,11 +4,9 @@
 	"scaffold_notice": "This is the v1 scaffold: the four services are wired up, the dashboard follows with the UI milestone.",
 	"health_link": "Health endpoint",
 	"language": "Language",
-
 	"settings_mailboxes_link": "Mailboxes",
 	"settings_autotask_link": "Autotask",
 	"settings_webhooks_link": "Webhooks",
-
 	"autotask_title": "Autotask",
 	"autotask_back": "Back to the overview",
 	"autotask_intro": "Nightwatch opens a ticket for the right company when a monitor breaks, comments on escalation and all-clear, and closes the ticket again when the recovery is evidence-based and nobody has touched it. Every numeric ID below is specific to your Autotask database and is resolved here rather than guessed.",
@@ -25,7 +23,6 @@
 	"autotask_channel_on": "Open Autotask tickets",
 	"autotask_channel_hint": "Off means nothing is sent. Customers without a link stay on dashboard and webhook either way.",
 	"autotask_save_access": "Save access",
-
 	"autotask_zone": "Zone",
 	"autotask_zone_hint": "The API base URL differs per Autotask database. It is resolved once and then stored.",
 	"autotask_zone_missing": "not resolved yet",
@@ -35,7 +32,6 @@
 	"autotask_zone_needs_user": "Save the API user name first.",
 	"autotask_ready": "Ready — tickets will be opened for linked customers.",
 	"autotask_not_ready": "Not ready yet. Access, zone, status, priority, note type and note visibility are all required — an all-clear is a note, so without the note fields Nightwatch could open tickets it can never comment on or close.",
-
 	"autotask_defaults": "Ticket defaults",
 	"autotask_defaults_hint": "Resolved from your Autotask picklists. Status and priority are mandatory for every ticket; the rest depends on your ticket category and tenant settings.",
 	"autotask_unset": "— not set —",
@@ -58,13 +54,11 @@
 	"autotask_due_hours_hint": "Autotask requires a due date unless your ticket category supplies one. Leave empty to omit the field.",
 	"autotask_save_defaults": "Save defaults",
 	"autotask_save_failed": "Could not be saved. NIGHTWATCH_SECRET_KEY may not be set.",
-
 	"webhooks_title": "Webhooks",
 	"webhooks_back": "Back to the overview",
 	"webhooks_intro": "Nightwatch calls every active receiver on alarm, escalation and all-clear. The payload is self-carrying — monitor, customer, reason, times and a link back — so a receiver never has to ask Nightwatch anything. Delivery is at-least-once with backoff: the same event can arrive twice, and the receiver tells the repeat by alert_id and event.",
 	"webhooks_signature_hint": "Every call carries X-Nightwatch-Signature, an HMAC-SHA256 over the raw body with this receiver's secret. docs/webhook.md documents the payload and shows how to verify it.",
 	"webhooks_empty": "No receiver set up yet.",
-
 	"webhook_add": "Add a receiver",
 	"webhook_edit": "Edit",
 	"webhook_label": "Name",
@@ -86,11 +80,9 @@
 	"webhook_remove_blocked": "This receiver cannot be removed while deliveries still refer to it — that record is the evidence of which alarms failed to reach it. Switch it off instead.",
 	"webhook_save": "Save",
 	"webhook_save_failed": "Could not be saved. NIGHTWATCH_SECRET_KEY may not be set.",
-
 	"mailboxes_title": "Mailboxes",
 	"mailboxes_intro": "Nightwatch polls each mailbox's inbox via the Microsoft Graph delta query. Connecting one pulls a one-off learning window of past mail — learning material for rule derivation and mail search, never monitoring material.",
 	"mailboxes_empty": "No mailbox connected yet.",
-
 	"mailbox_add": "Connect a mailbox",
 	"mailbox_label": "Name",
 	"mailbox_label_hint": "Shown on the dashboard, e.g. “NOC inbox”.",
@@ -108,7 +100,6 @@
 	"mailbox_learning_window": "Learning window (days)",
 	"mailbox_learning_window_hint": "How much history the one-off backfill fetches. 1 to 90 days.",
 	"mailbox_save": "Connect",
-
 	"mailbox_status": "Ingestion status",
 	"mailbox_last_poll": "Last successful poll",
 	"mailbox_last_error": "Last error",
@@ -121,12 +112,10 @@
 	"mailbox_resume": "Resume",
 	"mailbox_remove": "Remove",
 	"mailbox_remove_confirm": "Remove this mailbox? Its mails and delta state are deleted; alarm history and ticket correlations are kept.",
-
 	"credential_ok": "Credential valid",
 	"credential_soon": "Credential expires soon",
 	"credential_expired": "Credential expired",
 	"credential_unknown": "No expiry date recorded",
-
 	"onboarding_title": "Set up access",
 	"onboarding_consent": "1. Admin consent",
 	"onboarding_consent_hint": "Send this link to an administrator of the customer tenant. It grants the application permission Mail.Read.",
@@ -134,12 +123,10 @@
 	"onboarding_redirect_hint": "Register this redirect URI in your app registration first — Microsoft Entra ID matches it character for character:",
 	"onboarding_rbac": "2. Restrict to this mailbox",
 	"onboarding_rbac_hint": "Without this, the consent grants access to every mailbox in the customer tenant. Run this in Exchange Online PowerShell.",
-
 	"consent_title": "Admin consent",
 	"consent_granted": "Consent was granted. Permissions can take up to two hours to take effect.",
 	"consent_failed": "Consent was not granted.",
 	"consent_back": "Back to mailboxes",
-
 	"customers_link": "Customers",
 	"customers_title": "Customers",
 	"customers_intro": "Every incoming mail is assigned to a customer first and only then to that customer's monitors. Without a matching assignment trait it goes to the system triage — there is deliberately no catch-all customer.",
@@ -179,7 +166,6 @@
 	"customer_delete_confirm": "Delete this customer permanently? Only possible for a mistaken entry without history, and it cannot be undone.",
 	"customer_delete_blocked": "This customer already has history and can only be archived.",
 	"customer_unknown": "This customer does not exist (any more).",
-
 	"traits_title": "Assignment traits",
 	"traits_intro": "Fixed priority ①②③: the highest matching stage wins immediately, nothing is weighted. If several customers match on the same stage the mail goes to the system triage rather than being guessed at.",
 	"traits_empty": "No trait yet — no mail can currently be assigned to this customer.",
@@ -196,7 +182,6 @@
 	"stage_inhaltsmuster_hint": "Text appearing in the mail's subject or body, e.g. a customer number. Case-insensitive; matched as a whole token, so K-1234 does not catch K-12345.",
 	"stage_absender": "③ Sender",
 	"stage_absender_hint": "Sender address or domain, e.g. reports@acme.example or acme.example. Subdomains do not count.",
-
 	"error_required": "Required.",
 	"error_trait_plus_address": "Enter a plus address with a tag, e.g. noc+customera@msp.example.",
 	"error_trait_too_short": "At least three characters — shorter patterns match almost every mail.",
@@ -213,5 +198,35 @@
 	"error_webhook_https": "HTTPS only — tick the opt-in above if this receiver really has to be reached over plain HTTP.",
 	"error_webhook_scheme": "Only https:// and http:// can be called.",
 	"error_create": "The mailbox could not be created. The address may already be connected, or NIGHTWATCH_SECRET_KEY is not set.",
-	"saved": "Saved."
+	"saved": "Saved.",
+	"settings_self_link": "Self-monitoring",
+	"self_title": "Self-monitoring",
+	"self_back": "Back to overview",
+	"self_intro": "Nightwatch watches itself: one monitor per mailbox and one for the core. The watchdog evaluates them outside the normal alarm pipeline and sends their alarms on its own path.",
+	"self_existence_hint": "Self-monitors cannot be created, deleted or paused — only their parameters are settable.",
+	"self_unobserved": "Neither a webhook target nor a heartbeat ping is set up. If the database or the whole host goes down, nobody will find out — that is precisely the failure Nightwatch cannot report itself.",
+	"self_services": "Services",
+	"self_services_hint": "Last seen heartbeats. The core monitor fires when web or worker fall silent; the watchdog does not check itself.",
+	"self_monitors": "Self-monitors",
+	"self_healthy": "healthy",
+	"self_disturbed": "disturbed",
+	"self_staleness": "Staleness (seconds)",
+	"self_staleness_hint": "How long the observed signal may be missing before the monitor is disturbed.",
+	"self_stability": "All-clear stability (seconds)",
+	"self_stability_hint": "Leave empty for the instance default. How long a recovery has to hold before the all-clear goes out.",
+	"self_save_parameters": "Save parameters",
+	"self_save_failed": "Saving failed. Please check your input.",
+	"self_ping": "Heartbeat ping",
+	"self_ping_intro": "An outgoing sign of life to a URL of your choosing — your RMM, your own monitoring, whatever you like. It only fires while everything inside is healthy: a degraded instance goes quiet, and the receiver raises the alarm.",
+	"self_ping_url": "Target URL",
+	"self_ping_url_hint": "Stored encrypted and never shown again. Leaving it empty means no ping.",
+	"self_ping_url_kept": "A URL is stored. Leaving this empty keeps it; entering a new one replaces it.",
+	"self_ping_interval": "Interval (seconds)",
+	"self_ping_interval_hint": "Pick a grace period at the receiver that is comfortably longer than this interval.",
+	"self_ping_last": "Last arrived",
+	"self_ping_save": "Save ping",
+	"self_ping_off": "Switch ping off",
+	"error_number": "Please enter a whole number.",
+	"autotask_self_company": "Company for self-monitors",
+	"autotask_self_company_hint": "companyID that self-monitor tickets are filed under. Without it they alert through the dashboard and webhooks only."
 }

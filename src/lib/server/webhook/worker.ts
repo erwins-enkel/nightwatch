@@ -79,7 +79,7 @@ export async function starteWebhookWorker(boss: PgBoss): Promise<WebhookWorker> 
 		for (const job of jobs) {
 			// The only place that gives up on a delivery — and the signal SPEC §8 calls
 			// „Alarm-Zustellung gestört", which the global self-monitor (#30) reads off these rows.
-			await markiereFehlgeschlagen(job.data.zustellungId);
+			await markiereFehlgeschlagen(job.data.zustellungId, new Date());
 			log.error('Alarm-Zustellung gestört', {
 				zustellungId: job.data.zustellungId,
 				versuche: VERSUCHE
