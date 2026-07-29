@@ -9,7 +9,7 @@
  *
  * Läuft nur, wenn `DATABASE_URL` irgendwohin zeigt — wie `alarm/db.test.ts`.
  */
-import { createHmac } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
@@ -61,13 +61,24 @@ describe.skipIf(!databaseUrl && !process.env.CI)('Webhook-Zustellung', () => {
 	let zielId: string;
 	let kundeId: string;
 
+	/**
+	 * Der Ablauf entschlüsselt das Secret über den impliziten Weg (`entschluessele(chiffre)`), also
+	 * muss ein Schlüssel in der Umgebung stehen. Der Fall stellt ihn selbst — wie `crypto.test.ts`
+	 * — statt ihn von außen zu erwarten: `bun run test` soll ohne gesetztes
+	 * `NIGHTWATCH_SECRET_KEY` durchlaufen, lokal wie in der CI.
+	 */
+	const urspruenglicherSchluessel = process.env.NIGHTWATCH_SECRET_KEY;
+
 	beforeAll(async () => {
+		process.env.NIGHTWATCH_SECRET_KEY = randomBytes(32).toString('base64');
 		pool = new pg.Pool({ connectionString: databaseUrl });
 		db = drizzle(pool, { schema });
 		await migrate(db, { migrationsFolder: 'drizzle' });
 	});
 
 	afterAll(async () => {
+		if (urspruenglicherSchluessel === undefined) delete process.env.NIGHTWATCH_SECRET_KEY;
+		else process.env.NIGHTWATCH_SECRET_KEY = urspruenglicherSchluessel;
 		await pool?.end();
 	});
 
