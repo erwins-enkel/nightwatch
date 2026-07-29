@@ -14,7 +14,7 @@
 	"autotask_access": "API access",
 	"autotask_access_hint": "Create a dedicated API-only user in Autotask with a custom (internal) integration code. It needs no UI access — only permission to read and write tickets and to read companies.",
 	"autotask_user": "API user name",
-	"autotask_user_hint": "The email address of the API-only user.",
+	"autotask_user_hint": "The email address of the API-only user. Changing it clears the stored zone — a different user can mean a different Autotask database, so the zone has to be resolved again.",
 	"autotask_secret": "Secret",
 	"autotask_secret_hint": "Stored AES-256-GCM encrypted and never shown again.",
 	"autotask_secret_kept": "stored — leave empty to keep",
@@ -33,7 +33,7 @@
 	"autotask_zone_failed": "The zone could not be resolved. Check the API user name.",
 	"autotask_zone_needs_user": "Save the API user name first.",
 	"autotask_ready": "Ready — tickets will be opened for linked customers.",
-	"autotask_not_ready": "Not ready yet: access, zone, status and priority are all required.",
+	"autotask_not_ready": "Not ready yet. Access, zone, status, priority, note type and note visibility are all required — an all-clear is a note, so without the note fields Nightwatch could open tickets it can never comment on or close.",
 
 	"autotask_defaults": "Ticket defaults",
 	"autotask_defaults_hint": "Resolved from your Autotask picklists. Status and priority are mandatory for every ticket; the rest depends on your ticket category and tenant settings.",

@@ -14,7 +14,7 @@
 	"autotask_access": "API-Zugang",
 	"autotask_access_hint": "Legt in Autotask einen eigenen API-only-User mit Custom-(Internal-)Integration-Code an. Er braucht keinen UI-Zugriff — nur Tickets lesen und schreiben sowie Companies lesen.",
 	"autotask_user": "API-Benutzername",
-	"autotask_user_hint": "Die E-Mail-Adresse des API-only-Users.",
+	"autotask_user_hint": "Die E-Mail-Adresse des API-only-Users. Ändert ihr ihn, wird die gespeicherte Zone verworfen — ein anderer User kann eine andere Autotask-Datenbank bedeuten, die Zone muss dann neu ermittelt werden.",
 	"autotask_secret": "Secret",
 	"autotask_secret_hint": "Wird AES-256-GCM-verschlüsselt gespeichert und nie wieder angezeigt.",
 	"autotask_secret_kept": "gespeichert — leer lassen, um es zu behalten",
@@ -33,7 +33,7 @@
 	"autotask_zone_failed": "Die Zone konnte nicht ermittelt werden. Prüft den API-Benutzernamen.",
 	"autotask_zone_needs_user": "Speichert zuerst den API-Benutzernamen.",
 	"autotask_ready": "Bereit — für verknüpfte Kunden werden Tickets angelegt.",
-	"autotask_not_ready": "Noch nicht bereit: Zugang, Zone, Status und Priorität müssen alle stehen.",
+	"autotask_not_ready": "Noch nicht bereit. Zugang, Zone, Status, Priorität, Notiz-Typ und Notiz-Sichtbarkeit müssen alle stehen — eine Entwarnung ist eine Notiz, ohne die Notiz-Felder legte Nightwatch also Tickets an, die es nie kommentieren oder schließen kann.",
 
 	"autotask_defaults": "Ticket-Vorgaben",
 	"autotask_defaults_hint": "Aus euren Autotask-Picklisten aufgelöst. Status und Priorität sind für jedes Ticket Pflicht; der Rest hängt von eurer Ticket-Kategorie und den Tenant-Einstellungen ab.",

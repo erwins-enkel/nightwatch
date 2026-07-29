@@ -1,4 +1,4 @@
-import { and, desc, eq, isNotNull } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, sql } from 'drizzle-orm';
 import { getDb } from '../db/client';
 import { einstellungen, kunde, ticketKorrelation } from '../db/schema';
 import type { AutotaskTicketDefaults } from '../db/schema/system';
@@ -52,21 +52,31 @@ export async function holeKonfig(db: Ausfuehrer = getDb()): Promise<AutotaskKonf
 }
 
 /**
- * Whether this instance can create a ticket at all.
+ * Whether this instance can carry an alarm episode through to its end.
  *
- * `statusId` and `priorityId` are Autotask's only unconditional requirements besides the company
- * (Research-Doc §3); without them every `POST /Tickets` would fail, so a half-configured instance
- * plans no delivery rather than filling the dead-letter queue with the same mistake.
+ * Deliberately not just "can it create a ticket": an episode is alarm, possibly Verschärfung, and
+ * an Entwarnung, and the last two are **notes**. `noteType` and `publish` are required on
+ * `TicketNotes` exactly as `status` and `priority` are required on `Tickets`, so an instance that
+ * has only the ticket half configured would open a ticket it can then never comment on or close —
+ * the all-clear would dead-letter while the alarm stands, which is worse than not alerting through
+ * Autotask at all.
+ *
+ * `abschlussStatusId` is **not** in here on purpose: without it Nightwatch simply never closes
+ * automatically, which is a supported choice rather than a broken configuration.
  */
 export function istEinsatzbereit(konfig: AutotaskKonfig): boolean {
+	const { statusId, priorityId, notizTypId, notizPublishId } = konfig.defaults;
+
 	return (
 		konfig.aktiv &&
 		konfig.zoneUrl !== null &&
 		konfig.benutzer !== null &&
 		konfig.secretChiffre !== null &&
 		konfig.integrationCodeChiffre !== null &&
-		konfig.defaults.statusId !== undefined &&
-		konfig.defaults.priorityId !== undefined
+		statusId !== undefined &&
+		priorityId !== undefined &&
+		notizTypId !== undefined &&
+		notizPublishId !== undefined
 	);
 }
 
@@ -78,6 +88,17 @@ export interface ZugangsEingabe {
 	aktiv: boolean;
 }
 
+/**
+ * Saves the access — and drops the stored zone whenever the API user changes.
+ *
+ * The zone belongs to *that user's* Autotask database (Research-Doc §1), so a new user can mean a
+ * different database. Keeping the old URL would leave the instance looking ready while pointing
+ * every authenticated request at the previous tenant. Invalidating it costs the operator one click
+ * on „Zone ermitteln"; not invalidating it costs them a silent misroute.
+ *
+ * Done as one statement rather than read-compare-write: the comparison happens in the same UPDATE
+ * that overwrites the value it compares against, so no concurrent save can slip between the two.
+ */
 export async function speichereZugang(
 	eingabe: ZugangsEingabe,
 	db: Ausfuehrer = getDb()
@@ -86,6 +107,8 @@ export async function speichereZugang(
 		.update(einstellungen)
 		.set({
 			autotaskBenutzer: eingabe.benutzer,
+			autotaskZoneUrl: sql`case when ${einstellungen.autotaskBenutzer} is distinct from ${eingabe.benutzer}
+				then null else ${einstellungen.autotaskZoneUrl} end`,
 			...(eingabe.secretChiffre === null ? {} : { autotaskSecretChiffre: eingabe.secretChiffre }),
 			...(eingabe.integrationCodeChiffre === null
 				? {}

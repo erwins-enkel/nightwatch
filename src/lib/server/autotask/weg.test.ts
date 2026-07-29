@@ -110,7 +110,12 @@ describe.skipIf(!databaseUrl && !process.env.CI)('Planen', () => {
 				autotaskBenutzer: 'api@msp.test',
 				autotaskSecretChiffre: 'chiffre',
 				autotaskIntegrationCodeChiffre: 'chiffre',
-				autotaskTicketDefaults: { statusId: 1, priorityId: 2 }
+				autotaskTicketDefaults: {
+					statusId: 1,
+					priorityId: 2,
+					notizTypId: 1,
+					notizPublishId: 1
+				}
 			})
 			.where(eq(schema.einstellungen.id, 1));
 
@@ -143,12 +148,23 @@ describe.skipIf(!databaseUrl && !process.env.CI)('Planen', () => {
 		expect(await plane()).toEqual([]);
 	});
 
-	it('plant nichts, solange die Pflicht-IDs fehlen', async () => {
+	it('plant nichts, solange die Ticket-Pflicht-IDs fehlen', async () => {
 		// Ohne Status und Priorität scheitert jedes `POST /Tickets` — dann lieber gar nicht erst
 		// zustellen, statt die Dead-Letter-Queue mit demselben Fehler zu füllen.
 		await db
 			.update(schema.einstellungen)
-			.set({ autotaskTicketDefaults: { queueId: 8 } })
+			.set({ autotaskTicketDefaults: { queueId: 8, notizTypId: 1, notizPublishId: 1 } })
+			.where(eq(schema.einstellungen.id, 1));
+
+		expect(await plane()).toEqual([]);
+	});
+
+	it('plant nichts, solange die Notiz-Pflicht-IDs fehlen', async () => {
+		// Sonst öffnete der Alarm ein Ticket, das die Entwarnung nie kommentieren oder schließen
+		// könnte — die Störung stünde offen und der Dead-Letter wüchse mit jedem Ereignis.
+		await db
+			.update(schema.einstellungen)
+			.set({ autotaskTicketDefaults: { statusId: 1, priorityId: 2 } })
 			.where(eq(schema.einstellungen.id, 1));
 
 		expect(await plane()).toEqual([]);
