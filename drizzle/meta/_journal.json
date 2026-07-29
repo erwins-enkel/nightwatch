@@ -50,6 +50,13 @@
       "when": 1785324133923,
       "tag": "0006_alarm_lebenszyklus",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1785333405011,
+      "tag": "0007_webhook_ziel",
+      "breakpoints": true
     }
   ]
 }

@@ -227,16 +227,35 @@ export const ticketKorrelation = pgTable(
  * each target carries its own HMAC secret, and SPEC §12 requires every secret to be encrypted at
  * rest as a value of its own.
  */
-export const webhookZiel = pgTable('webhook_ziel', {
-	id: uuid('id').primaryKey().defaultRandom(),
-	bezeichnung: text('bezeichnung').notNull(),
-	/** HTTPS only, except for internal targets the operator opts in explicitly (SPEC §12). */
-	url: text('url').notNull(),
-	/** Secret for the `X-Nightwatch-Signature` HMAC-SHA256 over the body. */
-	secretChiffre: text('secret_chiffre'),
-	aktiv: boolean('aktiv').notNull().default(true),
-	erstelltAm: timestamp('erstellt_am', { withTimezone: true }).notNull().defaultNow()
-});
+export const webhookZiel = pgTable(
+	'webhook_ziel',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		bezeichnung: text('bezeichnung').notNull(),
+		/** HTTPS only, except for internal targets the operator opts in explicitly (SPEC §12). */
+		url: text('url').notNull(),
+		/** Secret for the `X-Nightwatch-Signature` HMAC-SHA256 over the body. */
+		secretChiffre: text('secret_chiffre'),
+		/** The opt-in from SPEC §12 — for an internal receiver that has no certificate. */
+		httpErlaubt: boolean('http_erlaubt').notNull().default(false),
+		aktiv: boolean('aktiv').notNull().default(true),
+		erstelltAm: timestamp('erstellt_am', { withTimezone: true }).notNull().defaultNow()
+	},
+	(t) => [
+		/**
+		 * „Webhooks nur HTTPS-Ziele, HTTP nur mit explizitem Opt-in für interne Ziele" (SPEC §12) —
+		 * as a database guarantee, because the form is not the only way a row can appear.
+		 *
+		 * The opt-in grants **HTTP**, not "any scheme": without the second half a target could carry
+		 * `ftp://` or `file://` the moment the checkbox is set, and the delivery would fail in the
+		 * fetch layer instead of at the one place that is supposed to decide this.
+		 */
+		check(
+			'webhook_ziel_transport',
+			sql`${t.url} like 'https://%' or (${t.httpErlaubt} and ${t.url} like 'http://%')`
+		)
+	]
+);
 
 /**
  * Nightwatch's own ledger of an outbound alarm delivery (SPEC §10 `zustellung`).

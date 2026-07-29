@@ -19,6 +19,8 @@ import { startAlarmScheduler } from '../lib/server/alarm/scheduler';
 import { registriereAlarmweg } from '../lib/server/alarm/wege';
 import { autotaskWeg } from '../lib/server/autotask/weg';
 import { starteAutotaskWorker } from '../lib/server/autotask/worker';
+import { webhookWeg } from '../lib/server/webhook/weg';
+import { starteWebhookWorker } from '../lib/server/webhook/worker';
 import { monitorStufe } from '../lib/server/monitor/pipeline';
 
 const log = createLogger('worker');
@@ -66,6 +68,12 @@ log.info('zeit scheduler started', { tickMs: env.zeitTickMs });
 const autotask = await starteAutotaskWorker(boss);
 registriereAlarmweg(autotaskWeg(boss));
 
+// The generic webhook channel (SPEC §7), registered before the publisher for the same reason.
+// It is the channel that also carries self-monitor events, and it is what an operator without
+// Autotask alerts through.
+const webhook = await starteWebhookWorker(boss);
+registriereAlarmweg(webhookWeg(boss));
+
 // The alarm lifecycle's outbox (SPEC §6–7): transitions are written by the two loops above, inside
 // their transactions; this one turns them into outside effects. Without it the dashboard would be
 // live and every ticket and webhook silent.
@@ -86,8 +94,8 @@ async function shutdown(signal: string): Promise<void> {
 	heartbeat.stop();
 	watchdog.stop();
 	// Stops fetching before pg-boss shuts down, so a delivery in flight finishes instead of being
-	// cut off halfway between the ticket and the row that records it.
-	await autotask.stop();
+	// cut off halfway between the ticket (or the webhook call) and the row that records it.
+	await Promise.all([autotask.stop(), webhook.stop()]);
 	await boss.stop({ graceful: true }).catch((err: unknown) => {
 		log.warn('pg-boss shutdown failed', { error: describeError(err) });
 	});
