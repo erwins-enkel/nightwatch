@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, notExists, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { getDb } from '../db/client';
 import { kunde, monitor, uebergang, zustellung } from '../db/schema';
@@ -24,6 +24,8 @@ type Ausfuehrer = Db | Tx;
 
 /** The predecessor episode, joined in only for its published id. */
 const vorgaenger = alias(uebergang, 'vorgaenger');
+/** Any *older* episode of the same monitor — the one that may not be overtaken. */
+const aeltere = alias(uebergang, 'aeltere');
 
 // ---------------------------------------------------------------------------------------------
 // Veröffentlichen
@@ -54,14 +56,18 @@ export interface Seitenmarke {
  * oder umgebaut wurde, schuldet niemandem eine Entwarnung" — and `entwarnung_entfaellt_am`
  * excludes the recoveries that did not hold, permanently and without re-deriving why.
  */
-const OFFEN = sql`(
-	${uebergang.alarmiertAm} is null
-	or (${uebergang.verschaerftAm} is not null and ${uebergang.verschaerfungGemeldetAm} is null)
-	or (
-		${uebergang.beendetAm} is not null and ${uebergang.entwarntAm} is null
-		and ${uebergang.entwarnungEntfaelltAm} is null and ${uebergang.erholungsArt} <> 'archiviert'
-	)
-)`;
+function offenePflichten(t: typeof uebergang | typeof aeltere) {
+	return sql`(
+		${t.alarmiertAm} is null
+		or (${t.verschaerftAm} is not null and ${t.verschaerfungGemeldetAm} is null)
+		or (
+			${t.beendetAm} is not null and ${t.entwarntAm} is null
+			and ${t.entwarnungEntfaelltAm} is null and ${t.erholungsArt} <> 'archiviert'
+		)
+	)`;
+}
+
+const OFFEN = offenePflichten(uebergang);
 
 /** The flat row both queries below share: one episode plus who it belongs to. */
 export interface EpisodenZeile {
@@ -132,10 +138,12 @@ export interface OffeneEpisode extends EpisodenZeile {
 /**
  * Claims a page of episodes that owe an event, oldest first.
  *
- * **The order is the guarantee.** A tick that finds several episodes of one monitor at once has to
- * publish the Entwarnung of the older one before the alarm of the younger, or the all-clear closes
- * a ticket the newer alarm just re-opened. Sorting by `(begonnen_am, id)` and walking one episode
- * at a time delivers that without a special case.
+ * The order keeps a single pass tidy — the Entwarnung of the older episode is published before the
+ * alarm of the younger one — but it is **not** where the guarantee lives. `skip locked` lets a
+ * second worker take a younger episode while an older one is being written, and a lagging
+ * Bewertungs-Schranke can hold back an Entwarnung while the next alarm is already publishable.
+ * What must never be overtaken is the *delivery*, and that is enforced in
+ * `ladeOffeneZustellungen`, against committed rows rather than against who claimed what first.
  *
  * Keyset paging rather than „claim until the page is short": an episode whose only pending event
  * is an Entwarnung that is not due yet matches the predicate but produces no work, and an offset
@@ -225,8 +233,6 @@ export interface OffeneZustellung {
 	webhookZielId: string | null;
 	jobId: string | null;
 	episode: EpisodenSicht;
-	/** The delivery target's chain key — deliveries of one chain run strictly one after another. */
-	kette: string;
 }
 
 /**
@@ -240,16 +246,71 @@ const EREIGNIS_RANG = sql`case ${zustellung.ereignis}
 	when 'alarm' then 0 when 'verschaerfung' then 1 else 2 end`;
 
 /**
- * The deliveries that have not reached their receiver yet, in the order they were published:
- * episode by episode, and within an episode alarm → Verschärfung → Entwarnung.
+ * The head of every delivery chain: per target (`monitor` × `kanal` × `webhook_ziel`) the oldest
+ * delivery that has not reached its receiver yet, oldest chain first.
  *
- * That order is what the caller turns into one delivery in flight per target, so a close can never
- * be overtaken by the alarm of the next episode.
+ * **One row per chain, not the oldest N rows overall.** A limit over the flat list would let a
+ * single flapping monitor fill the whole window with its own backlog and starve every other
+ * target indefinitely — the deliveries of a stalled chain accumulate, and they are the oldest.
+ * Bounding by *chains* makes each target contribute exactly one candidate, so the limit can only
+ * postpone whole chains, never hide one behind another.
+ *
+ * Episodes whose **predecessor still owes an event** are excluded outright. Publishing is not
+ * globally ordered — `skip locked` lets a second worker take a younger episode while an older one
+ * is being written, and a lagging Bewertungs-Schranke can hold back an Entwarnung while the alarm
+ * of the next episode is already publishable. Handing over the younger alarm first would make the
+ * adapter comment the old ticket instead of opening a new one after the close, and the late
+ * Entwarnung would then close the ticket the alarm just opened. The filter drops whole episodes,
+ * so it can never promote a younger delivery of the same episode to head.
  */
 export async function ladeOffeneZustellungen(
 	limit: number,
 	db: Ausfuehrer = getDb()
 ): Promise<OffeneZustellung[]> {
+	const koepfe = db
+		.select({
+			// Aliased one by one: `zustellung.id` and `uebergang.id` would collide into two columns
+			// of the same name, and the outer query could not tell them apart.
+			id: sql<string>`${zustellung.id}`.as('zustellung_id'),
+			begonnenAm: sql<Date>`${uebergang.begonnenAm}`.as('begonnen_am'),
+			uebergangId: sql<string>`${uebergang.id}`.as('uebergang_id'),
+			rang: EREIGNIS_RANG.as('rang'),
+			platz: sql<number>`row_number() over (
+				partition by ${uebergang.monitorId}, ${zustellung.kanal}, ${zustellung.webhookZielId}
+				order by ${uebergang.begonnenAm}, ${uebergang.id}, ${EREIGNIS_RANG}, ${zustellung.id}
+			)`.as('platz')
+		})
+		.from(zustellung)
+		.innerJoin(uebergang, eq(uebergang.id, zustellung.uebergangId))
+		.where(
+			and(
+				eq(zustellung.zustand, 'offen'),
+				notExists(
+					db
+						.select({ eins: sql`1` })
+						.from(aeltere)
+						.where(
+							and(
+								eq(aeltere.monitorId, uebergang.monitorId),
+								sql`(${aeltere.begonnenAm}, ${aeltere.id}) < (${uebergang.begonnenAm}, ${uebergang.id})`,
+								offenePflichten(aeltere)
+							)
+						)
+				)
+			)
+		)
+		.as('koepfe');
+
+	const ausgewaehlt = await db
+		.select({ id: koepfe.id })
+		.from(koepfe)
+		.where(eq(koepfe.platz, 1))
+		.orderBy(asc(koepfe.begonnenAm), asc(koepfe.uebergangId), asc(koepfe.rang))
+		.limit(limit);
+
+	if (ausgewaehlt.length === 0) return [];
+
+	const ids = ausgewaehlt.map((zeile) => zeile.id);
 	const zeilen = await db
 		.select({
 			...episodenFelder,
@@ -264,9 +325,8 @@ export async function ladeOffeneZustellungen(
 		.innerJoin(monitor, eq(monitor.id, uebergang.monitorId))
 		.innerJoin(kunde, eq(kunde.id, monitor.kundeId))
 		.leftJoin(vorgaenger, eq(vorgaenger.id, uebergang.vorgaengerId))
-		.where(eq(zustellung.zustand, 'offen'))
-		.orderBy(asc(uebergang.begonnenAm), asc(uebergang.id), EREIGNIS_RANG, asc(zustellung.id))
-		.limit(limit);
+		.where(inArray(zustellung.id, ids))
+		.orderBy(asc(uebergang.begonnenAm), asc(uebergang.id), EREIGNIS_RANG, asc(zustellung.id));
 
 	return zeilen.map((zeile) => ({
 		id: zeile.id,
@@ -274,9 +334,6 @@ export async function ladeOffeneZustellungen(
 		kanal: zeile.kanal,
 		webhookZielId: zeile.webhookZielId,
 		jobId: zeile.jobId,
-		// One chain per delivery target: a stalled Autotask must not hold up a webhook, and a slow
-		// receiver must not hold up another receiver — but within one target the order is binding.
-		kette: `${zeile.monitorId}|${zeile.kanal}|${zeile.webhookZielId ?? ''}`,
 		episode: alsSicht(zeile)
 	}));
 }

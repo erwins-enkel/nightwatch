@@ -20,7 +20,7 @@ import { legeMonitorAn, schreibeWirkung, setzeAktivierung, sperreMonitore } from
 import type { MonitorEingabe } from '../monitor/db';
 import { wendeAn } from '../monitor/zustand';
 import { legeKundeAn } from '../zuordnung/db';
-import { erledige, setzeQuittierung, vermerkeZustellung } from './db';
+import { erledige, ladeOffeneZustellungen, setzeQuittierung, vermerkeZustellung } from './db';
 import type { AlarmEreignisDaten } from './ereignis';
 import { werteAlarmeAus } from './scheduler';
 import { setzeAlarmwege, type Alarmweg, type ZustellPlan } from './wege';
@@ -555,6 +555,91 @@ describe.skipIf(!databaseUrl && !process.env.CI)('Alarm-Lebenszyklus', () => {
 
 			expect(webhook.reihenfolge.length).toBe(2);
 			expect(autotask.reihenfolge.length).toBe(1);
+		});
+
+		/**
+		 * Der Alarm einer jüngeren Episode darf die Entwarnung der älteren nicht überholen — auch
+		 * dann nicht, wenn er längst veröffentlicht ist und sie noch auf die Bewertungs-Schranke
+		 * wartet. Sonst legte der Adapter für E2 ein Ticket an, das die verspätete Entwarnung von
+		 * E1 gleich wieder schlösse.
+		 */
+		it('hält den jüngeren Alarm zurück, solange die ältere Episode etwas schuldet', async () => {
+			const weg = new TestWeg('webhook', [webhookZielId]);
+			setzeAlarmwege([weg]);
+			const id = await legeAn({ entwarnungsStabilitaetSekunden: 900 });
+
+			await stoere(id, 'ueberfaellig', T('06:00'));
+			await erhole(id, T('06:05'));
+			await stoere(id, 'fehler_gemeldet', T('06:25'));
+
+			// Ein Rückstand zieht die Schranke hinter das Fensterende zurück: der Alarm der zweiten
+			// Episode ist veröffentlichbar, die Entwarnung der ersten nicht.
+			await db.insert(schema.mail).values({
+				postfachId,
+				graphMessageId: 'rueckstand',
+				ankunftszeit: T('06:15'),
+				absender: 'usv@usv.test',
+				empfaenger: ['noc@msp.test'],
+				betreff: 'Netzausfall',
+				bodyText: 'down'
+			});
+
+			await tick(T('06:30'));
+			const [erste, zweite] = await episoden(id);
+			expect(erste.entwarntAm).toBeNull();
+			expect((await zustellungen()).map((zeile) => zeile.ereignis)).toEqual(['alarm', 'alarm']);
+
+			// Der Alarm der zweiten Episode wartet — nicht hinter einer Zustellung, sondern hinter
+			// der offenen Pflicht der ersten.
+			await tick(T('06:31'));
+			expect(weg.reihenfolge).toEqual([`alarm:${erste.alertId}`]);
+			await bestaetigeUebergebene(weg, T('06:32'));
+			await tick(T('06:33'));
+			expect(weg.reihenfolge).toEqual([`alarm:${erste.alertId}`]);
+
+			// Erst als der Rückstand weg ist, geht die Entwarnung raus — und dann der jüngere Alarm.
+			await db
+				.update(schema.mail)
+				.set({ verarbeitetAm: T('06:34') })
+				.where(eq(schema.mail.graphMessageId, 'rueckstand'));
+
+			await tick(T('06:35'));
+			await bestaetigeUebergebene(weg, T('06:36'));
+			await tick(T('06:37'));
+
+			expect(weg.reihenfolge).toEqual([
+				`alarm:${erste.alertId}`,
+				`entwarnung:${erste.alertId}`,
+				`alarm:${zweite.alertId}`
+			]);
+		});
+
+		/**
+		 * Ein Monitor mit langem Rückstand darf die anderen nicht aushungern: begrenzt wird die
+		 * Zahl der **Ziele**, nicht die der Zeilen — jede Kette stellt genau einen Kandidaten.
+		 */
+		it('gibt je Ziel einen Kopf zurück, statt das Fenster mit einer Kette zu füllen', async () => {
+			setzeAlarmwege([new TestWeg('webhook', [webhookZielId])]);
+			const flatternd = await legeAn({ entwarnungsStabilitaetSekunden: 0 });
+
+			// Drei Episoden, drei offene Zustellungen — alle älter als die des zweiten Monitors.
+			await stoere(flatternd, 'ueberfaellig', T('06:00'));
+			await erhole(flatternd, T('06:01'));
+			await stoere(flatternd, 'ueberfaellig', T('06:02'));
+			await erhole(flatternd, T('06:03'));
+			await stoere(flatternd, 'ueberfaellig', T('06:04'));
+
+			const ruhig = await legeAn({ bezeichnung: 'USV' });
+			await stoere(ruhig, 'fehler_gemeldet', T('06:10'));
+
+			await tick(T('06:20'));
+			expect((await zustellungen()).length).toBeGreaterThan(3);
+
+			// Zwei Ziele, zwei Köpfe — der flatternde Monitor belegt einen Platz, nicht das Fenster.
+			const koepfe = await ladeOffeneZustellungen(2, db);
+			const monitore = koepfe.map((kopf) => kopf.episode.monitor.id);
+			expect(monitore).toContain(flatternd);
+			expect(monitore).toContain(ruhig);
 		});
 
 		it('lässt eine Zustellung ohne registrierten Weg als Nachweis liegen', async () => {

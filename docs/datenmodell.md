@@ -158,6 +158,17 @@ statt nach der Schließung ein neues anzulegen. Eine Zeile blockiert die jünger
 solange sie `offen` ist — Wiederholungen eingeschlossen — und gibt sie frei, sobald sie
 `zugestellt` oder (Dead-Letter) `fehlgeschlagen` ist.
 
+Das genügt allerdings nur für Weisungen, die schon **existieren**. Veröffentlicht wird nicht global
+geordnet: `SKIP LOCKED` lässt einen zweiten Worker eine jüngere Episode nehmen, während eine ältere
+geschrieben wird, und eine nachhinkende Bewertungs-Schranke hält eine Entwarnung zurück, während
+der Alarm der nächsten Episode längst veröffentlichbar ist. Übergeben wird eine Zeile deshalb erst,
+wenn **keine ältere Episode desselben Monitors mehr etwas schuldet** — geprüft gegen dieselben
+Marker, gegen committete Zeilen statt gegen die Frage, wer zuerst geclaimt hat.
+
+Begrenzt wird dabei die Zahl der **Ziele**, nicht die der Zeilen: die Abfrage liefert je Kette
+genau einen Kopf. Ein flatternder Monitor mit langem Rückstand belegt damit einen Platz und nicht
+das ganze Fenster — sonst hungerte er, weil seine Zeilen die ältesten sind, alle anderen Ziele aus.
+
 `job_id` wird erst nach der Übergabe geschrieben. Stirbt der Prozess dazwischen, übergibt der
 nächste Tick dieselbe Zeile erneut; deshalb **ist die Zustellungs-ID die Identität des
 Queue-Jobs** — ein zweiter Anlauf legt keinen zweiten Job an.

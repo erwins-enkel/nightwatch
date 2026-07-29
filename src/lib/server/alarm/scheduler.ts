@@ -33,8 +33,13 @@ import type { AlarmEreignis } from '../db/schema/enums';
 
 const log = createLogger('alarm');
 
-/** Deliveries examined per tick. Bounded by what has not reached its receiver yet. */
-const ZUSTELLUNGEN_PRO_TICK = 500;
+/**
+ * Delivery targets served per tick — chains, not rows.
+ *
+ * Each chain contributes exactly one candidate, so a monitor with a large unsent backlog costs one
+ * slot instead of the whole window.
+ */
+const ZIELE_PRO_TICK = 500;
 
 export interface AlarmBericht {
 	/** Events published in this pass. */
@@ -158,27 +163,25 @@ async function veroeffentlicheSeite(
  * while it is `offen`, retries included, and releases them when it is `zugestellt` or (dead letter)
  * `fehlgeschlagen`.
  *
+ * The query hands back one head per chain, so a chain with a long backlog occupies exactly one
+ * slot of the limit and cannot starve the others.
+ *
  * A row that already carries a `job_id` is in the queue's hands; one without is either fresh or
  * was interrupted before its id could be written — the same handover covers both, because the
  * delivery id is the job's identity.
  */
 async function uebergebeOffene(basisUrl: string, db: ReturnType<typeof getDb>): Promise<number> {
-	const offene = await ladeOffeneZustellungen(ZUSTELLUNGEN_PRO_TICK, db);
+	const koepfe = await ladeOffeneZustellungen(ZIELE_PRO_TICK, db);
 
-	if (offene.length === ZUSTELLUNGEN_PRO_TICK) {
-		// The oldest come first, so the head of every long-running chain still moves — but a backlog
-		// this size means alarms are piling up unsent, and that must not look like a quiet minute.
-		log.warn('Zustellungs-Rückstand', { betrachtet: ZUSTELLUNGEN_PRO_TICK });
-	}
-
-	const koepfe = new Map<string, (typeof offene)[number]>();
-	for (const eintrag of offene) {
-		if (!koepfe.has(eintrag.kette)) koepfe.set(eintrag.kette, eintrag);
+	if (koepfe.length === ZIELE_PRO_TICK) {
+		// Whole chains are postponed to the next tick, never hidden behind one another — but this
+		// many waiting targets means alarms are piling up unsent, and that must not pass silently.
+		log.warn('Zustellungs-Rückstand', { ziele: ZIELE_PRO_TICK });
 	}
 
 	let uebergeben = 0;
 
-	for (const kopf of koepfe.values()) {
+	for (const kopf of koepfe) {
 		if (kopf.jobId !== null) continue;
 
 		const weg = alarmwege().find((eintrag) => eintrag.kanal === kopf.kanal);
