@@ -455,6 +455,7 @@ truth for product and architecture decisions.
 │   └── watchdog/                   # Watchdog entrypoint
 └── docs/
     ├── datenmodell.md               # Entities, invariants and the decisions behind them
+    ├── webhook.md                   # Webhook payload, HMAC signature, delivery semantics
     └── research/
         ├── m365-graph-ingestion.md # Ingestion: Graph delta-query, app model, scoping, self-monitoring
         ├── autotask-api.md         # Autotask PSA ticket creation, de-dup, retry queue

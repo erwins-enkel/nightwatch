@@ -35,6 +35,12 @@
 		>
 			{m.settings_autotask_link()}
 		</a>
+		<a
+			href={resolve('/einstellungen/webhooks')}
+			class="w-fit text-emerald-400 underline underline-offset-4"
+		>
+			{m.settings_webhooks_link()}
+		</a>
 		<a href={resolve('/health')} class="w-fit text-emerald-400 underline underline-offset-4">
 			{m.health_link()}
 		</a>

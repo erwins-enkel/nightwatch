@@ -20,7 +20,13 @@ import { legeMonitorAn, schreibeWirkung, setzeAktivierung, sperreMonitore } from
 import type { MonitorEingabe } from '../monitor/db';
 import { wendeAn } from '../monitor/zustand';
 import { legeKundeAn } from '../zuordnung/db';
-import { erledige, ladeOffeneZustellungen, setzeQuittierung, vermerkeZustellung } from './db';
+import {
+	erledige,
+	ladeOffeneZustellungen,
+	ladeZustellung,
+	setzeQuittierung,
+	vermerkeZustellung
+} from './db';
 import type { AlarmEreignisDaten } from './ereignis';
 import { werteAlarmeAus } from './scheduler';
 import { setzeAlarmwege, type Alarmweg, type ZustellPlan } from './wege';
@@ -662,6 +668,120 @@ describe.skipIf(!databaseUrl && !process.env.CI)('Alarm-Lebenszyklus', () => {
 			expect(unberuehrt.id).toBe(entwarnZeile.id);
 			expect(unberuehrt.zustand).toBe('offen');
 			expect(unberuehrt.jobId).toBeNull();
+		});
+	});
+
+	// -----------------------------------------------------------------------------------------
+	/**
+	 * Selbst-Monitor-Episoden (SPEC §7–8): `monitor.art = "selbst"`, `kunde = null`.
+	 *
+	 * Sie entstehen nicht über den Publisher — den Sende-Pfad fährt der Watchdog (#30) —, deshalb
+	 * legen die Fälle hier Episode und Zustellung direkt an, genau so, wie er es tun wird. Was
+	 * geprüft wird, ist der Teil, der dem Kanal gehört: dass die Zeile lesbar ist und dass die
+	 * Ketten-Ordnung für Selbst-Monitore genauso gilt wie für Kunden-Monitore.
+	 */
+	describe('Selbst-Monitore', () => {
+		async function legeSelbstMonitorAn(schluessel: string, bezeichnung: string): Promise<string> {
+			const [zeile] = await db
+				.insert(schema.selbstMonitor)
+				.values({ schluessel, art: 'postfach', bezeichnung })
+				.returning({ id: schema.selbstMonitor.id });
+			return zeile.id;
+		}
+
+		/** Eine Episode samt Zustellung, wie der Watchdog sie schreiben wird. */
+		async function legeEpisodeAn(
+			selbstMonitorId: string,
+			begonnenAm: Date,
+			teile: Partial<typeof schema.uebergang.$inferInsert> = {}
+		): Promise<{ uebergangId: string; alertId: string; zustellungId: string }> {
+			const [episode] = await db
+				.insert(schema.uebergang)
+				.values({
+					selbstMonitorId,
+					alarmgrund: 'ueberfaellig',
+					begonnenAm,
+					letztesVorkommenAm: begonnenAm,
+					alarmiertAm: begonnenAm,
+					...teile
+				})
+				.returning({ id: schema.uebergang.id, alertId: schema.uebergang.alertId });
+
+			const [zustellungZeile] = await db
+				.insert(schema.zustellung)
+				.values({
+					uebergangId: episode.id,
+					ereignis: 'alarm',
+					kanal: 'webhook',
+					webhookZielId
+				})
+				.returning({ id: schema.zustellung.id });
+
+			return {
+				uebergangId: episode.id,
+				alertId: episode.alertId,
+				zustellungId: zustellungZeile.id
+			};
+		}
+
+		it('liest eine Selbst-Monitor-Zustellung als „selbst" ohne Kunden', async () => {
+			const selbstId = await legeSelbstMonitorAn('postfach:noc', 'Ingestion Postfach NOC');
+			const { zustellungId } = await legeEpisodeAn(selbstId, T('06:00'));
+
+			const auftrag = await ladeZustellung(zustellungId, db);
+
+			expect(auftrag).not.toBeNull();
+			expect(auftrag?.episode.kunde).toBeNull();
+			expect(auftrag?.episode.monitor).toEqual({
+				art: 'selbst',
+				id: selbstId,
+				bezeichnung: 'Ingestion Postfach NOC',
+				schluessel: 'postfach:noc'
+			});
+		});
+
+		/**
+		 * Ohne eigene Ketten-Identität fielen alle Selbst-Monitore in die eine NULL-Partition: der
+		 * Alarm des einen blockierte den des anderen, obwohl sie nichts miteinander zu tun haben.
+		 */
+		it('gibt jedem Selbst-Monitor eine eigene Kette', async () => {
+			const ersterId = await legeSelbstMonitorAn('postfach:a', 'Ingestion Postfach A');
+			const zweiterId = await legeSelbstMonitorAn('postfach:b', 'Ingestion Postfach B');
+
+			await legeEpisodeAn(ersterId, T('06:00'));
+			await legeEpisodeAn(zweiterId, T('06:10'));
+
+			const koepfe = await ladeOffeneZustellungen(10, db);
+
+			expect(koepfe.map((kopf) => kopf.episode.monitor.id).sort()).toEqual(
+				[ersterId, zweiterId].sort()
+			);
+		});
+
+		/** Dieselbe Zusage wie beim Kunden-Monitor: die jüngere Episode wartet auf die ältere. */
+		it('hält die jüngere Episode hinter der offenen Pflicht der älteren zurück', async () => {
+			const selbstId = await legeSelbstMonitorAn('postfach:c', 'Ingestion Postfach C');
+
+			// Die ältere Episode schuldet noch ihre Entwarnung: beendet, aber nicht entwarnt.
+			const aeltere = await legeEpisodeAn(selbstId, T('06:00'), {
+				beendetAm: T('06:05'),
+				erholungsArt: 'beweis'
+			});
+			await legeEpisodeAn(selbstId, T('06:10'));
+
+			const gebremst = await ladeOffeneZustellungen(10, db);
+			expect(gebremst.map((kopf) => kopf.id)).toEqual([aeltere.zustellungId]);
+
+			// Erst als die ältere nichts mehr schuldet, rückt die jüngere nach.
+			await db
+				.update(schema.uebergang)
+				.set({ entwarntAm: T('06:20') })
+				.where(eq(schema.uebergang.id, aeltere.uebergangId));
+			await vermerkeZustellung(aeltere.zustellungId, 'zugestellt', T('06:21'), null, db);
+
+			const frei = await ladeOffeneZustellungen(10, db);
+			expect(frei.length).toBe(1);
+			expect(frei[0].id).not.toBe(aeltere.zustellungId);
 		});
 	});
 

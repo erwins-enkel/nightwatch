@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray, isNull, notExists, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { getDb } from '../db/client';
-import { kunde, monitor, uebergang, zustellung } from '../db/schema';
+import { kunde, monitor, selbstMonitor, uebergang, zustellung } from '../db/schema';
 import type {
 	AlarmEreignis,
 	Alarmgrund,
@@ -69,7 +69,14 @@ function offenePflichten(t: typeof uebergang | typeof aeltere) {
 
 const OFFEN = offenePflichten(uebergang);
 
-/** The flat row both queries below share: one episode plus who it belongs to. */
+/**
+ * One episode plus whom it belongs to — the row every query below shares.
+ *
+ * Both sides are nullable because `uebergang` hangs on exactly one of them (CHECK
+ * `uebergang_genau_ein_monitor`): a customer monitor with its customer, or a self-monitor with
+ * neither. The nested shapes are what make that readable — Drizzle nulls a whole nested object
+ * when its left join found nothing, so „welche Seite ist es?" stays one question instead of six.
+ */
 export interface EpisodenZeile {
 	alertId: string;
 	vorgaengerAlertId: string | null;
@@ -80,11 +87,9 @@ export interface EpisodenZeile {
 	verschaerftAm: Date | null;
 	beendetAm: Date | null;
 	erholungsArt: ErholungsArt | null;
-	monitorId: string;
-	monitorBezeichnung: string;
-	monitorArt: MonitorArt;
-	kundeId: string;
-	kundeName: string;
+	monitor: { id: string; bezeichnung: string; art: MonitorArt } | null;
+	kunde: { id: string; name: string } | null;
+	selbst: { id: string; bezeichnung: string; schluessel: string } | null;
 }
 
 const episodenFelder = {
@@ -97,16 +102,23 @@ const episodenFelder = {
 	verschaerftAm: uebergang.verschaerftAm,
 	beendetAm: uebergang.beendetAm,
 	erholungsArt: uebergang.erholungsArt,
-	monitorId: monitor.id,
-	monitorBezeichnung: monitor.bezeichnung,
-	monitorArt: monitor.art,
-	kundeId: kunde.id,
-	kundeName: kunde.name
+	monitor: { id: monitor.id, bezeichnung: monitor.bezeichnung, art: monitor.art },
+	kunde: { id: kunde.id, name: kunde.name },
+	selbst: {
+		id: selbstMonitor.id,
+		bezeichnung: selbstMonitor.bezeichnung,
+		schluessel: selbstMonitor.schluessel
+	}
 };
 
-/** The episode as the payload builder wants it (`ereignis.ts`). */
+/**
+ * The episode as the payload builder wants it (`ereignis.ts`).
+ *
+ * The self-monitor branch is what SPEC §7 asks the webhook to carry: `monitor.art = "selbst"` with
+ * the `schluessel`, and no customer at all — „Gehört keinem Kunden" (CONTEXT „Selbst-Monitor").
+ */
 export function alsSicht(zeile: EpisodenZeile): EpisodenSicht {
-	return {
+	const gemeinsam = {
 		alertId: zeile.alertId,
 		vorgaengerAlertId: zeile.vorgaengerAlertId,
 		alarmgrund: zeile.alarmgrund,
@@ -115,14 +127,25 @@ export function alsSicht(zeile: EpisodenZeile): EpisodenSicht {
 		vorkommen: zeile.vorkommen,
 		verschaerftAm: zeile.verschaerftAm,
 		beendetAm: zeile.beendetAm,
-		erholungsArt: zeile.erholungsArt,
-		monitor: {
-			art: zeile.monitorArt,
-			id: zeile.monitorId,
-			bezeichnung: zeile.monitorBezeichnung
-		},
-		kunde: { id: zeile.kundeId, name: zeile.kundeName }
+		erholungsArt: zeile.erholungsArt
 	};
+
+	if (zeile.selbst) {
+		return {
+			...gemeinsam,
+			monitor: { art: 'selbst', ...zeile.selbst },
+			kunde: null
+		};
+	}
+
+	if (!zeile.monitor || !zeile.kunde) {
+		// Unreachable through the CHECK, which lets an episode hang on exactly one of the two — but
+		// the CHECK lives in the database and TypeScript cannot read it. Loud rather than a payload
+		// that names no monitor.
+		throw new Error(`Übergang ${zeile.alertId} hängt an keinem Monitor`);
+	}
+
+	return { ...gemeinsam, monitor: { ...zeile.monitor }, kunde: { ...zeile.kunde } };
 }
 
 export interface OffeneEpisode extends EpisodenZeile {
@@ -149,8 +172,10 @@ export interface OffeneEpisode extends EpisodenZeile {
  * is an Entwarnung that is not due yet matches the predicate but produces no work, and an offset
  * that never moves would spin on it forever.
  *
- * Only customer monitors. Self-monitor episodes are sent by the watchdog on its own path (SPEC
- * §8); publishing them here as well would send everything twice.
+ * Only customer monitors — the inner join is the filter. Self-monitor episodes are sent by the
+ * watchdog on its own path (SPEC §8); publishing them here as well would send everything twice.
+ * `selbst_monitor` is joined all the same so the row keeps the shape `alsSicht` reads; the CHECK
+ * makes it null in every row this query can return.
  */
 export async function claimOffeneEpisoden(
 	nach: Seitenmarke,
@@ -171,6 +196,7 @@ export async function claimOffeneEpisoden(
 			.from(uebergang)
 			.innerJoin(monitor, eq(monitor.id, uebergang.monitorId))
 			.innerJoin(kunde, eq(kunde.id, monitor.kundeId))
+			.leftJoin(selbstMonitor, eq(selbstMonitor.id, uebergang.selbstMonitorId))
 			.leftJoin(vorgaenger, eq(vorgaenger.id, uebergang.vorgaengerId))
 			.where(
 				and(
@@ -246,6 +272,15 @@ const EREIGNIS_RANG = sql`case ${zustellung.ereignis}
 	when 'alarm' then 0 when 'verschaerfung' then 1 else 2 end`;
 
 /**
+ * Which monitor an episode belongs to, whichever of the two columns carries it.
+ *
+ * Without the `coalesce` every self-monitor would share the single NULL partition below, and their
+ * chains would collapse into one: the alarm of the core monitor would block a mailbox monitor's
+ * all-clear for no reason at all.
+ */
+const MONITOR_IDENTITAET = sql`coalesce(${uebergang.monitorId}, ${uebergang.selbstMonitorId})`;
+
+/**
  * The head of every delivery chain: per target (`monitor` × `kanal` × `webhook_ziel`) the oldest
  * delivery that has not reached its receiver yet, oldest chain first.
  *
@@ -276,7 +311,7 @@ export async function ladeOffeneZustellungen(
 			uebergangId: sql<string>`${uebergang.id}`.as('uebergang_id'),
 			rang: EREIGNIS_RANG.as('rang'),
 			platz: sql<number>`row_number() over (
-				partition by ${uebergang.monitorId}, ${zustellung.kanal}, ${zustellung.webhookZielId}
+				partition by ${MONITOR_IDENTITAET}, ${zustellung.kanal}, ${zustellung.webhookZielId}
 				order by ${uebergang.begonnenAm}, ${uebergang.id}, ${EREIGNIS_RANG}, ${zustellung.id}
 			)`.as('platz')
 		})
@@ -291,7 +326,14 @@ export async function ladeOffeneZustellungen(
 						.from(aeltere)
 						.where(
 							and(
-								eq(aeltere.monitorId, uebergang.monitorId),
+								// "Same monitor", written as two equalities rather than over
+								// `MONITOR_IDENTITAET`: each side is indexed
+								// (`uebergang_monitor_begonnen_idx`, `uebergang_selbst_monitor_begonnen_idx`),
+								// a `coalesce` on both columns would be neither. Exactly one column is set
+								// per row (CHECK `uebergang_genau_ein_monitor`), so the other comparison is
+								// null and can never make this true by accident.
+								sql`(${aeltere.monitorId} = ${uebergang.monitorId}
+									or ${aeltere.selbstMonitorId} = ${uebergang.selbstMonitorId})`,
 								sql`(${aeltere.begonnenAm}, ${aeltere.id}) < (${uebergang.begonnenAm}, ${uebergang.id})`,
 								offenePflichten(aeltere)
 							)
@@ -322,8 +364,11 @@ export async function ladeOffeneZustellungen(
 		})
 		.from(zustellung)
 		.innerJoin(uebergang, eq(uebergang.id, zustellung.uebergangId))
-		.innerJoin(monitor, eq(monitor.id, uebergang.monitorId))
-		.innerJoin(kunde, eq(kunde.id, monitor.kundeId))
+		// Left, not inner: a self-monitor episode has no monitor row and no customer, and dropping
+		// it here would make its deliveries invisible to the handover forever (SPEC §7–8).
+		.leftJoin(monitor, eq(monitor.id, uebergang.monitorId))
+		.leftJoin(kunde, eq(kunde.id, monitor.kundeId))
+		.leftJoin(selbstMonitor, eq(selbstMonitor.id, uebergang.selbstMonitorId))
 		.leftJoin(vorgaenger, eq(vorgaenger.id, uebergang.vorgaengerId))
 		.where(inArray(zustellung.id, ids))
 		.orderBy(asc(uebergang.begonnenAm), asc(uebergang.id), EREIGNIS_RANG, asc(zustellung.id));
@@ -369,8 +414,11 @@ export async function ladeZustellung(
 		})
 		.from(zustellung)
 		.innerJoin(uebergang, eq(uebergang.id, zustellung.uebergangId))
-		.innerJoin(monitor, eq(monitor.id, uebergang.monitorId))
-		.innerJoin(kunde, eq(kunde.id, monitor.kundeId))
+		// Left, like above: a self-monitor delivery has to load, or the webhook channel could never
+		// send the „monitor.art = selbst, kunde = null" event SPEC §7 requires of it.
+		.leftJoin(monitor, eq(monitor.id, uebergang.monitorId))
+		.leftJoin(kunde, eq(kunde.id, monitor.kundeId))
+		.leftJoin(selbstMonitor, eq(selbstMonitor.id, uebergang.selbstMonitorId))
 		.leftJoin(vorgaenger, eq(vorgaenger.id, uebergang.vorgaengerId))
 		.where(eq(zustellung.id, zustellungId))
 		.limit(1);
