@@ -85,11 +85,33 @@ export const selbstMonitor = pgTable(
 	]
 );
 
-/** SPEC §7 — the tenant-specific numeric IDs, resolved once at setup and never hardcoded. */
+/**
+ * SPEC §7 — the tenant-specific numeric IDs, resolved once at setup and never hardcoded.
+ *
+ * Every value here is a picklist entry of *one* Autotask tenant; there is deliberately no default
+ * anywhere in the code. An instance that has not resolved them yet simply does not plan an Autotask
+ * delivery (`autotask/weg.ts`), which is how the channel stays off until it is actually configured.
+ */
 export interface AutotaskTicketDefaults {
+	/**
+	 * The status a Nightwatch ticket is created with — and therefore also the reference for
+	 * „unberührt" when an Entwarnung asks whether it may close the ticket (SPEC §6).
+	 */
 	statusId?: number;
 	priorityId?: number;
 	queueId?: number;
+	/** The status a ticket is set to when a beweisbasierte Erholung closes it. */
+	abschlussStatusId?: number;
+	/** `billingCodeID`; only needed when the tenant requires a work type on tickets. */
+	arbeitstypId?: number;
+	/** `TicketNotes.noteType` / `TicketNotes.publish` — both required on a note. */
+	notizTypId?: number;
+	notizPublishId?: number;
+	/**
+	 * `dueDateTime = angelegt + N h`. Autotask requires a due date unless the ticket category
+	 * supplies one, so this is set by default; clearing it omits the field entirely.
+	 */
+	faelligkeitStunden?: number;
 }
 
 /**

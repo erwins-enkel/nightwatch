@@ -16,6 +16,9 @@ import { startIngestionScheduler } from '../lib/server/ingestion/scheduler';
 import { startZuordnungScheduler } from '../lib/server/zuordnung/scheduler';
 import { startZeitScheduler } from '../lib/server/zeit/scheduler';
 import { startAlarmScheduler } from '../lib/server/alarm/scheduler';
+import { registriereAlarmweg } from '../lib/server/alarm/wege';
+import { autotaskWeg } from '../lib/server/autotask/weg';
+import { starteAutotaskWorker } from '../lib/server/autotask/worker';
 import { monitorStufe } from '../lib/server/monitor/pipeline';
 
 const log = createLogger('worker');
@@ -57,6 +60,12 @@ log.info('zuordnung scheduler started', { tickMs: env.zuordnungTickMs });
 const zeit = startZeitScheduler({ tickMs: env.zeitTickMs });
 log.info('zeit scheduler started', { tickMs: env.zeitTickMs });
 
+// The Autotask channel (SPEC §7). Registered *before* the publisher starts, so the very first tick
+// already sees the way — a transition published without it would carry no ticket delivery, and the
+// publisher's markers make sure it is never published a second time.
+const autotask = await starteAutotaskWorker(boss);
+registriereAlarmweg(autotaskWeg(boss));
+
 // The alarm lifecycle's outbox (SPEC §6–7): transitions are written by the two loops above, inside
 // their transactions; this one turns them into outside effects. Without it the dashboard would be
 // live and every ticket and webhook silent.
@@ -76,6 +85,9 @@ async function shutdown(signal: string): Promise<void> {
 	alarm.stop();
 	heartbeat.stop();
 	watchdog.stop();
+	// Stops fetching before pg-boss shuts down, so a delivery in flight finishes instead of being
+	// cut off halfway between the ticket and the row that records it.
+	await autotask.stop();
 	await boss.stop({ graceful: true }).catch((err: unknown) => {
 		log.warn('pg-boss shutdown failed', { error: describeError(err) });
 	});

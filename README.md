@@ -171,6 +171,38 @@ When a monitor changes state, Nightwatch can alert through:
 
 Email alerts are intentionally **not** part of v1.
 
+### Connecting Autotask
+
+Two steps, one in Autotask and one in Nightwatch.
+
+**In Autotask**, create a dedicated user with the security level **API User (API-only)** and a
+**Custom (Internal Integration)** tracking identifier. API-only users cost no seat and have no UI
+access; a copy of the system security level restricted to reading and writing tickets and reading
+companies is enough.
+
+**In Nightwatch**, open *Settings → Autotask*:
+
+1. Save the API user name, its secret and the integration code. All three are stored AES-256-GCM
+   encrypted, so `NIGHTWATCH_SECRET_KEY` has to be set (see [Connecting a
+   mailbox](#connecting-a-mailbox)).
+2. **Resolve the zone.** Autotask's API base URL differs per database; it is looked up once and
+   stored, never per call.
+3. **Pick the ticket defaults.** Status, priority, queue, work type and the note fields are
+   numeric IDs *of your database* — Nightwatch reads them from your picklists and stores what you
+   choose. Nothing is hardcoded, so no value is assumed to mean the same thing in your tenant as in
+   anyone else's. Status and priority are mandatory; without them no ticket is ever attempted.
+4. **Link your customers.** On each customer page, search the Autotask directory and pick the
+   company. Only its stable ID is stored — there is no continuous sync and no bulk import, and a
+   customer without a link keeps alerting through the dashboard and webhooks.
+
+What then happens on an alarm: Nightwatch opens **one ticket per monitor**, carrying a correlation
+key in `externalID`. Before creating anything it queries for that key, which is what makes a retry
+after a crash idempotent. Escalations and all-clears are added as notes; the ticket is only closed
+automatically when the recovery was evidence-based **and** the ticket is untouched — still in its
+creation status, with nobody assigned. Deliveries run through a durable queue with exponential
+backoff, serialized as Autotask asks; once the attempts are spent, the delivery is marked failed and
+the alert delivery itself counts as disturbed.
+
 ## Email ingestion (v1): Microsoft 365 / Microsoft Graph
 
 v1 ingests mail from **Microsoft 365 only**, via **Graph delta-query polling** (pull) rather
