@@ -7,6 +7,7 @@
 
 	"settings_mailboxes_link": "Mailboxes",
 	"settings_autotask_link": "Autotask",
+	"settings_webhooks_link": "Webhooks",
 
 	"autotask_title": "Autotask",
 	"autotask_back": "Back to the overview",
@@ -57,6 +58,34 @@
 	"autotask_due_hours_hint": "Autotask requires a due date unless your ticket category supplies one. Leave empty to omit the field.",
 	"autotask_save_defaults": "Save defaults",
 	"autotask_save_failed": "Could not be saved. NIGHTWATCH_SECRET_KEY may not be set.",
+
+	"webhooks_title": "Webhooks",
+	"webhooks_back": "Back to the overview",
+	"webhooks_intro": "Nightwatch calls every active receiver on alarm, escalation and all-clear. The payload is self-carrying — monitor, customer, reason, times and a link back — so a receiver never has to ask Nightwatch anything. Delivery is at-least-once with backoff: the same event can arrive twice, and the receiver tells the repeat by alert_id and event.",
+	"webhooks_signature_hint": "Every call carries X-Nightwatch-Signature, an HMAC-SHA256 over the raw body with this receiver's secret. docs/webhook.md documents the payload and shows how to verify it.",
+	"webhooks_empty": "No receiver set up yet.",
+
+	"webhook_add": "Add a receiver",
+	"webhook_edit": "Edit",
+	"webhook_label": "Name",
+	"webhook_url": "URL",
+	"webhook_url_hint": "HTTPS only. Plain HTTP needs the opt-in below and is meant for receivers inside your own network.",
+	"webhook_http_optin": "Allow plain HTTP for this receiver",
+	"webhook_http_optin_hint": "Without TLS the payload and its signature travel readable on the wire. Only for an internal receiver that has no certificate.",
+	"webhook_secret": "Signing secret",
+	"webhook_secret_hint": "Used for the HMAC. Stored AES-256-GCM encrypted and never shown again.",
+	"webhook_secret_kept": "Stored — leave empty to keep it, fill in to replace it.",
+	"webhook_secret_present": "Signing secret stored",
+	"webhook_secret_missing": "No signing secret — deliveries to this receiver fail",
+	"webhook_active": "active",
+	"webhook_paused": "off",
+	"webhook_pause": "Switch off",
+	"webhook_resume": "Switch on",
+	"webhook_remove": "Remove",
+	"webhook_remove_confirm": "Remove this receiver? It stops getting alarms.",
+	"webhook_remove_blocked": "This receiver cannot be removed while deliveries still refer to it — that record is the evidence of which alarms failed to reach it. Switch it off instead.",
+	"webhook_save": "Save",
+	"webhook_save_failed": "Could not be saved. NIGHTWATCH_SECRET_KEY may not be set.",
 
 	"mailboxes_title": "Mailboxes",
 	"mailboxes_intro": "Nightwatch polls each mailbox's inbox via the Microsoft Graph delta query. Connecting one pulls a one-off learning window of past mail — learning material for rule derivation and mail search, never monitoring material.",
@@ -180,6 +209,9 @@
 	"error_interval": "Between 60 and 300 seconds.",
 	"error_learning_window": "Between 1 and 90 days.",
 	"error_date": "Enter a valid date.",
+	"error_webhook_url": "Enter a complete URL, e.g. https://rmm.example.com/hooks/nightwatch.",
+	"error_webhook_https": "HTTPS only — tick the opt-in above if this receiver really has to be reached over plain HTTP.",
+	"error_webhook_scheme": "Only https:// and http:// can be called.",
 	"error_create": "The mailbox could not be created. The address may already be connected, or NIGHTWATCH_SECRET_KEY is not set.",
 	"saved": "Saved."
 }

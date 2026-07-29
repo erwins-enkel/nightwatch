@@ -7,6 +7,7 @@
 
 	"settings_mailboxes_link": "Postfächer",
 	"settings_autotask_link": "Autotask",
+	"settings_webhooks_link": "Webhooks",
 
 	"autotask_title": "Autotask",
 	"autotask_back": "Zurück zur Übersicht",
@@ -57,6 +58,34 @@
 	"autotask_due_hours_hint": "Autotask verlangt ein Fälligkeitsdatum, solange eure Ticket-Kategorie keines liefert. Leer lassen heißt: Feld weglassen.",
 	"autotask_save_defaults": "Vorgaben speichern",
 	"autotask_save_failed": "Konnte nicht gespeichert werden. Vielleicht ist NIGHTWATCH_SECRET_KEY nicht gesetzt.",
+
+	"webhooks_title": "Webhooks",
+	"webhooks_back": "Zurück zur Übersicht",
+	"webhooks_intro": "Nightwatch ruft jedes aktive Ziel bei Alarm, Verschärfung und Entwarnung auf. Der Payload ist selbsttragend — Monitor, Kunde, Anlass, Zeiten und ein Rückverweis —, ein Empfänger muss also nie nachfragen. Zugestellt wird at-least-once mit Backoff: dasselbe Ereignis kann zweimal ankommen, den Wiederholer erkennt der Empfänger an alert_id und Ereignis.",
+	"webhooks_signature_hint": "Jeder Aufruf trägt X-Nightwatch-Signature, ein HMAC-SHA256 über den Rohbody mit dem Secret dieses Ziels. docs/webhook.md beschreibt den Payload und zeigt die Prüfung.",
+	"webhooks_empty": "Noch kein Ziel eingerichtet.",
+
+	"webhook_add": "Ziel hinzufügen",
+	"webhook_edit": "Bearbeiten",
+	"webhook_label": "Bezeichnung",
+	"webhook_url": "URL",
+	"webhook_url_hint": "Nur HTTPS. Einfaches HTTP braucht das Opt-in unten und ist für Ziele im eigenen Netz gedacht.",
+	"webhook_http_optin": "Einfaches HTTP für dieses Ziel erlauben",
+	"webhook_http_optin_hint": "Ohne TLS gehen Payload und Signatur lesbar über die Leitung. Nur für ein internes Ziel ohne Zertifikat.",
+	"webhook_secret": "Signatur-Secret",
+	"webhook_secret_hint": "Grundlage des HMAC. Wird AES-256-GCM-verschlüsselt gespeichert und nie wieder angezeigt.",
+	"webhook_secret_kept": "Hinterlegt — leer lassen heißt behalten, ausfüllen heißt ersetzen.",
+	"webhook_secret_present": "Signatur-Secret hinterlegt",
+	"webhook_secret_missing": "Kein Signatur-Secret — Zustellungen an dieses Ziel scheitern",
+	"webhook_active": "aktiv",
+	"webhook_paused": "aus",
+	"webhook_pause": "Abschalten",
+	"webhook_resume": "Einschalten",
+	"webhook_remove": "Entfernen",
+	"webhook_remove_confirm": "Dieses Ziel entfernen? Es bekommt dann keine Alarme mehr.",
+	"webhook_remove_blocked": "Dieses Ziel lässt sich nicht entfernen, solange Zustellungen darauf verweisen — die sind der Beleg, welche Alarme es nicht erreicht haben. Schaltet es stattdessen ab.",
+	"webhook_save": "Speichern",
+	"webhook_save_failed": "Konnte nicht gespeichert werden. Vielleicht ist NIGHTWATCH_SECRET_KEY nicht gesetzt.",
 
 	"mailboxes_title": "Postfächer",
 	"mailboxes_intro": "Nightwatch pollt den Posteingang jedes Postfachs per Microsoft-Graph-Delta-Query. Beim Verbinden wird einmalig ein Lernfenster vergangener Mails gezogen — Lernmaterial für Ableitung und Mail-Suche, nie Überwachungsmaterial.",
@@ -180,6 +209,9 @@
 	"error_interval": "Zwischen 60 und 300 Sekunden.",
 	"error_learning_window": "Zwischen 1 und 90 Tagen.",
 	"error_date": "Bitte ein gültiges Datum eingeben.",
+	"error_webhook_url": "Bitte eine vollständige URL eingeben, z. B. https://rmm.example.com/hooks/nightwatch.",
+	"error_webhook_https": "Nur HTTPS — setzt das Opt-in oben, wenn dieses Ziel wirklich über einfaches HTTP erreicht werden muss.",
+	"error_webhook_scheme": "Aufrufbar sind nur https:// und http://.",
 	"error_create": "Das Postfach konnte nicht angelegt werden. Vielleicht ist die Adresse schon verbunden, oder NIGHTWATCH_SECRET_KEY ist nicht gesetzt.",
 	"saved": "Gespeichert."
 }
