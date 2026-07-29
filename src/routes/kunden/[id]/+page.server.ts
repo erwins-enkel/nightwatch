@@ -1,5 +1,9 @@
 import { error, fail, redirect } from '@sveltejs/kit';
+import { entschluesseleZugang, erzeugeAutotaskPort } from '$lib/server/autotask/client';
+import { holeCompanyName, sucheCompanies } from '$lib/server/autotask/company';
+import { holeKonfig, setzeCompanyId } from '$lib/server/autotask/db';
 import { zuordnungsStufe, type ZuordnungsStufe } from '$lib/server/db/schema/enums';
+import { createLogger, describeError } from '$lib/server/logger';
 import {
 	aktualisiereKunde,
 	entferneMerkmal,
@@ -15,16 +19,39 @@ import { ganzzahlOderNull, text } from '$lib/server/zuordnung/formular';
 import { normalisiereWert, pruefeWert } from '$lib/server/zuordnung/merkmal';
 import type { Actions, PageServerLoad } from './$types';
 
+const log = createLogger('web');
+
+/** The Autotask access, or null when the instance has none — the picker is then simply absent. */
+async function autotaskPort() {
+	const zugang = entschluesseleZugang(await holeKonfig());
+	return zugang ? erzeugeAutotaskPort(zugang) : null;
+}
+
 export const load: PageServerLoad = async ({ params }) => {
 	const kunde = await holeKunde(params.id);
 	if (!kunde) error(404, 'Kunde nicht gefunden');
 
-	const [merkmale, kollisionen] = await Promise.all([
+	const [merkmale, kollisionen, port] = await Promise.all([
 		listeMerkmale(kunde.id),
-		findeKollisionenJeMerkmal(kunde.id)
+		findeKollisionenJeMerkmal(kunde.id),
+		autotaskPort()
 	]);
 
-	return { kunde, merkmale, kollisionen };
+	// CONTEXT „Autotask-Verknüpfung": only the ID is stored, so the name is looked up live. A PSA
+	// that is down must not take the customer page with it — the bare ID is still the truth.
+	let companyName: string | null = null;
+	if (port && kunde.autotaskCompanyId !== null) {
+		try {
+			companyName = await holeCompanyName(port, kunde.autotaskCompanyId);
+		} catch (err: unknown) {
+			log.warn('Autotask-Company nicht auflösbar', {
+				companyId: kunde.autotaskCompanyId,
+				error: describeError(err)
+			});
+		}
+	}
+
+	return { kunde, merkmale, kollisionen, autotaskVerfuegbar: port !== null, companyName };
 };
 
 function istStufe(wert: string): wert is ZuordnungsStufe {
@@ -51,20 +78,53 @@ export const actions: Actions = {
 	stammdaten: async ({ request, params }) => {
 		const daten = await request.formData();
 		const name = text(daten, 'name');
-		const autotaskCompanyId = ganzzahlOderNull(text(daten, 'autotaskCompanyId'));
+		if (name === '') return fail(400, abgelehnt({ name: 'pflicht' }));
 
-		const fehler: Record<string, string> = {};
-		if (name === '') fehler.name = 'pflicht';
-		if (autotaskCompanyId === undefined) fehler.autotaskCompanyId = 'autotask';
-		if (Object.keys(fehler).length > 0) return fail(400, abgelehnt(fehler));
+		const kunde = await holeKunde(params.id);
+		if (!kunde) return fail(404, abgelehnt({ formular: 'unbekannt' }));
 
 		await aktualisiereKunde(params.id, {
 			name,
 			kundennummer: text(daten, 'kundennummer') || null,
 			notiz: text(daten, 'notiz') || null,
-			autotaskCompanyId: autotaskCompanyId ?? null
+			// The link is not master data any more; it has its own picker below.
+			autotaskCompanyId: kunde.autotaskCompanyId
 		});
 
+		return { erfolg: 'gespeichert' as const };
+	},
+
+	/**
+	 * The picker's search (SPEC §7): names are unreliable and not unique, so the operator picks once
+	 * and Nightwatch keeps the ID — no name matching at alarm time.
+	 */
+	autotaskSuchen: async ({ request }) => {
+		const begriff = text(await request.formData(), 'suche');
+		if (begriff.length < 2) return fail(400, abgelehnt({ suche: 'suche_kurz' }));
+
+		const port = await autotaskPort();
+		if (!port) return fail(400, abgelehnt({ suche: 'nicht_konfiguriert' }));
+
+		try {
+			return { erfolg: 'gesucht' as const, treffer: await sucheCompanies(port, begriff), begriff };
+		} catch (err: unknown) {
+			log.warn('Autotask-Suche fehlgeschlagen', { error: describeError(err) });
+			return fail(400, abgelehnt({ suche: 'suche' }));
+		}
+	},
+
+	autotaskVerknuepfen: async ({ request, params }) => {
+		const companyId = ganzzahlOderNull(text(await request.formData(), 'companyId'));
+		if (companyId === undefined || companyId === null) {
+			return fail(400, abgelehnt({ suche: 'autotask' }));
+		}
+
+		await setzeCompanyId(params.id, companyId);
+		return { erfolg: 'gespeichert' as const };
+	},
+
+	autotaskLoesen: async ({ params }) => {
+		await setzeCompanyId(params.id, null);
 		return { erfolg: 'gespeichert' as const };
 	},
 

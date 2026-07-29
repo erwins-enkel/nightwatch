@@ -18,7 +18,10 @@
 		plus_adresse: m.error_trait_plus_address,
 		zu_kurz: m.error_trait_too_short,
 		absender: m.error_trait_sender,
-		doppelt: m.error_trait_duplicate
+		doppelt: m.error_trait_duplicate,
+		suche_kurz: m.error_search_too_short,
+		suche: m.error_autotask_search,
+		nicht_konfiguriert: m.customer_autotask_unconfigured
 	};
 
 	/** Declaration order = match order, so the picker lists the stages in their priority. */
@@ -229,26 +232,6 @@
 			</div>
 
 			<div class="flex flex-col gap-1">
-				<label class="text-sm text-slate-300" for="autotaskCompanyId">{m.customer_autotask()}</label
-				>
-				<input
-					class={eingabeKlasse}
-					id="autotaskCompanyId"
-					name="autotaskCompanyId"
-					type="number"
-					min="1"
-					step="1"
-					value={kunde.autotaskCompanyId ?? ''}
-					aria-describedby="autotask-hinweis"
-					aria-invalid={fehler.autotaskCompanyId ? 'true' : undefined}
-				/>
-				<p id="autotask-hinweis" class="text-xs text-slate-500">{m.customer_autotask_hint()}</p>
-				{#if fehler.autotaskCompanyId}
-					<p class="text-xs text-rose-400">{m.error_autotask_id()}</p>
-				{/if}
-			</div>
-
-			<div class="flex flex-col gap-1">
 				<label class="text-sm text-slate-300" for="notiz">{m.customer_note()}</label>
 				<input class={eingabeKlasse} id="notiz" name="notiz" value={kunde.notiz ?? ''} />
 			</div>
@@ -262,6 +245,109 @@
 				</button>
 			</div>
 		</form>
+	</section>
+
+	<!-- CONTEXT „Autotask-Verknüpfung": per Suche gesetzt, gespeichert wird nur die Company-ID. -->
+	<section class="flex flex-col gap-4 rounded-lg border border-slate-800 bg-slate-900/50 p-4">
+		<div class="flex flex-col gap-1">
+			<h2 class="text-lg font-medium text-slate-100">{m.customer_autotask()}</h2>
+			<p class="max-w-2xl text-sm text-slate-400">{m.customer_autotask_hint()}</p>
+		</div>
+
+		{#if kunde.autotaskCompanyId !== null}
+			<div
+				class="flex flex-wrap items-center justify-between gap-3 rounded border border-slate-800 p-3"
+			>
+				<div class="flex flex-col gap-1">
+					<span class="text-sm text-slate-200">
+						{data.companyName ?? m.customer_autotask_name_unknown()}
+					</span>
+					<span class="font-mono text-xs text-slate-500">
+						{m.customer_autotask_company()}: {kunde.autotaskCompanyId}
+					</span>
+				</div>
+				<form method="POST" action="?/autotaskLoesen" use:enhance>
+					<button
+						type="submit"
+						class="rounded border border-slate-700 px-3 py-1 text-xs text-rose-300 hover:border-rose-700"
+					>
+						{m.customer_autotask_unlink()}
+					</button>
+				</form>
+			</div>
+		{:else}
+			<p class="rounded border border-dashed border-slate-800 p-4 text-sm text-slate-400">
+				{m.customer_autotask_none()}
+			</p>
+		{/if}
+
+		{#if data.autotaskVerfuegbar}
+			<form
+				method="POST"
+				action="?/autotaskSuchen"
+				use:enhance
+				class="flex flex-wrap items-end gap-3"
+			>
+				<div class="flex min-w-64 flex-1 flex-col gap-1">
+					<label class="text-sm text-slate-300" for="suche">{m.customer_autotask_search()}</label>
+					<input
+						class={eingabeKlasse}
+						id="suche"
+						name="suche"
+						value={form?.erfolg === 'gesucht' ? form.begriff : ''}
+						aria-invalid={fehler.suche ? 'true' : undefined}
+					/>
+				</div>
+				<button
+					type="submit"
+					class="rounded bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500"
+				>
+					{m.customer_autotask_search_go()}
+				</button>
+			</form>
+
+			{#if fehler.suche}
+				<p class="text-xs text-rose-400">{FELD_FEHLER[fehler.suche]?.() ?? m.error_required()}</p>
+			{/if}
+
+			{#if form?.erfolg === 'gesucht'}
+				<ul class="flex flex-col gap-2">
+					{#each form.treffer as treffer (treffer.id)}
+						<li
+							class="flex flex-wrap items-center justify-between gap-3 rounded border border-slate-800 p-3"
+						>
+							<div class="flex flex-col gap-1">
+								<span class="text-sm text-slate-200">
+									{treffer.name}
+									{#if !treffer.aktiv}
+										<span class="ml-2 text-xs text-amber-300">{m.customer_autotask_inactive()}</span
+										>
+									{/if}
+								</span>
+								<span class="font-mono text-xs text-slate-500">
+									#{treffer.id}{treffer.ort ? ` · ${treffer.ort}` : ''}
+								</span>
+							</div>
+							<form method="POST" action="?/autotaskVerknuepfen" use:enhance>
+								<input type="hidden" name="companyId" value={treffer.id} />
+								<button
+									type="submit"
+									class="rounded border border-slate-700 px-3 py-1 text-xs text-emerald-300 hover:border-emerald-700"
+								>
+									{m.customer_autotask_link()}
+								</button>
+							</form>
+						</li>
+					{:else}
+						<li class="rounded border border-dashed border-slate-800 p-4 text-sm text-slate-400">
+							{m.customer_autotask_no_hits()}
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		{:else}
+			<p class="text-sm text-amber-300">{m.customer_autotask_unconfigured()}</p>
+		{/if}
 	</section>
 
 	<section class="flex flex-wrap items-center gap-4 rounded-lg border border-slate-800 p-4">
