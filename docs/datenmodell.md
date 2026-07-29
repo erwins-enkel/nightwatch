@@ -64,7 +64,10 @@ sie tragen soll.
 
 Folge für Folge-Sessions: `uebergang` verweist entweder auf `monitor` **oder** auf
 `selbst_monitor`, abgesichert durch `uebergang_genau_ein_monitor`. Das deckt sich mit den
-Korrelations-Keys aus SPEC §7 (`nw:{monitorId}:{uebergangId}` vs. `self:…`).
+Korrelations-Keys aus SPEC §7 (`nw:{monitorId}:{alertId}` vs. `self:{schluessel}:{alertId}`) — der
+„übergangsId" der SPEC ist die `alert_id` derselben Zeile, also ihre *veröffentlichte* Identität:
+der Key wandert in Autotasks `externalID` und verlässt damit die Instanz, interne IDs sollen das
+nicht.
 
 ### Der Delta-Zustand eines Postfachs ist eine *Runde*, kein Token
 
@@ -119,11 +122,45 @@ Zeitachse einer Episode:
 | Spalte | Bedeutung |
 |---|---|
 | `begonnen_am` | Übergang nach `gestoert`, der Alarm geht sofort raus |
+| `alarmiert_am` | Alarm nach außen gegeben |
 | `verschaerft_am` | Wechsel des Grunds **zu** „fehler_gemeldet" — der einzige automatische Zwischen-Kommentar |
+| `verschaerfung_gemeldet_am` | Verschärfung nach außen gegeben |
 | `letztes_vorkommen_am`, `vorkommen` | intern gezählt, Zusammenfassung geht mit der Entwarnung raus; trägt Auto-Zurück |
 | `beendet_am` | interne Erholung — Dashboard flippt sofort |
 | `entwarnt_am` | Entwarnung nach außen, erst nachdem die Entwarnungs-Stabilität hielt |
+| `entwarnung_entfaellt_am` | Re-Alarm **im** Stabilitätsfenster: die Erholung hielt nicht, die Entwarnung entfällt dauerhaft |
 | `erholungs_art` | nur `beweis` darf ein Ticket automatisch schließen |
+| `vorgaenger_id` | die vorige Episode desselben Monitors — Vorgänger-Verweis und Flatter-Kette |
+
+### Die drei Marker sind eine Outbox
+
+`alarmiert_am`, `verschaerfung_gemeldet_am` und `entwarnt_am` sind keine Protokoll-Kosmetik,
+sondern der Grund, warum jedes Ereignis **genau einmal** nach außen wirkt.
+
+Ein Übergang entsteht *innerhalb* der Transaktion, die ihn entschieden hat — der Mail-Pipeline
+oder des Zeit-Schedulers. Von dort zu senden hieße entweder vor dem Commit (und zu melden, was ein
+Rollback zurücknimmt) oder danach (und das Ereignis bei einem Absturz zu verlieren). Stattdessen
+leitet der Publisher (#27) seine Arbeit wie jede andere Schleife dieses Dienstes aus Zeilen ab:
+„welche Episode schuldet noch ein Ereignis?" Der partielle Index
+`uebergang_veroeffentlichung_offen_idx` trägt genau dieses Prädikat, sodass die offene Arbeit eine
+kleine Scheibe der dauerhaften Historie bleibt.
+
+`entwarnung_entfaellt_am` gehört dazu: Es wird von der **Nachfolge-Episode** beim Eröffnen gesetzt,
+wenn deren Störung noch ins Stabilitätsfenster der vorigen fällt. Der Entfall wird damit dort
+festgeschrieben, wo er entsteht — statt bei jedem Tick neu hergeleitet zu werden, was die Regel
+verdoppelt und jede je unterdrückte Episode für immer mitgescannt hätte.
+
+Das **Hauptbuch** `zustellung` entsteht in derselben Transaktion wie der Marker. Übergeben wird je
+Zustell-Ziel (`monitor` × `kanal` × `webhook_ziel`) allerdings nur **eine** Zeile zur Zeit: pg-boss
+sagt über die Reihenfolge nebenläufiger Jobs nichts zu, und liefe der Alarm der nächsten Episode
+vor dem Schließ-Job der vorigen, fände der Adapter deren Ticket noch offen und kommentierte es,
+statt nach der Schließung ein neues anzulegen. Eine Zeile blockiert die jüngeren ihres Ziels,
+solange sie `offen` ist — Wiederholungen eingeschlossen — und gibt sie frei, sobald sie
+`zugestellt` oder (Dead-Letter) `fehlgeschlagen` ist.
+
+`job_id` wird erst nach der Übergabe geschrieben. Stirbt der Prozess dazwischen, übergibt der
+nächste Tick dieselbe Zeile erneut; deshalb **ist die Zustellungs-ID die Identität des
+Queue-Jobs** — ein zweiter Anlauf legt keinen zweiten Job an.
 
 ### Monitor-Parameter sind Spalten, keine JSON-Blobs
 
@@ -210,6 +247,8 @@ Zeile — die Härtung in #35 und der Fremdschlüssel aus `zustellung` bräuchte
 | `zuordnungs_merkmal (stufe, wert)` | der Lookup-Pfad der Kunden-Zuordnung |
 | `mail (kunde_id, ankunftszeit)` | Mails eines Kunden, und die Lösch-Kaskade |
 | `uebergang (monitor_id) WHERE beendet_am IS NULL` unique | eine offene Episode pro Monitor |
+| `uebergang (begonnen_am, id)` partiell | der Claim des Publishers — nur Episoden mit offenem Ereignis |
+| `uebergang (vorgaenger_id)` | Vorgänger-Verweis und Flatter-Kette |
 | `ticket_korrelation (monitor_id) WHERE zustand = 'offen'` unique | ein offenes Ticket pro Monitor |
 | `selbst_monitor (art) WHERE art = 'kern'` unique | genau ein „Nightwatch-Kern" |
 

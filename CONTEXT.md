@@ -395,6 +395,17 @@ Sturmquelle an der Wurzel.
 Deep-Link, den jeder Alarm bzw. jedes erzeugte Ticket zurück ins Nightwatch-UI trägt — direkt zum
 auslösenden Monitor bzw. seiner Regel, um das Monitoring zu überarbeiten.
 
+**Alarmweg**:
+Der Kanal, über den ein Ereignis des Alarm-Lebenszyklus nach außen wirkt. Das **Dashboard** ist
+immer an und ist kein Weg im engeren Sinn: es liest den Zustand direkt, es wird ihm nichts
+zugestellt. Zugestellt wird an **Autotask-Ticket** und **generischen Webhook** — beides
+Zustell-**Ziele** mit eigener durabler Warteschlange. Der Lebenszyklus entscheidet dabei nur die
+*Semantik* („Ticket eröffnen", „kommentieren", „schließen"), den *Zustand* prüft das Ziel:
+schließen darf nur, wer eine beweisbasierte Erholung **und** ein unberührtes Ticket vorfindet.
+Weisungen desselben Ziels werden **nacheinander** ausgeführt — ein Alarm, der einen Schließ-Auftrag
+überholt, fände dessen Ticket noch offen und hinge sich an, statt ein neues aufzumachen.
+_Avoid_: Alarmkanal, Benachrichtigungsweg.
+
 ### Self-Monitoring
 
 **Selbst-Monitor**:
