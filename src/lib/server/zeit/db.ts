@@ -13,7 +13,7 @@ import {
 } from '../db/schema';
 import type { ErwartungModus } from '../db/schema/enums';
 import type { Kalenderplan } from '../db/schema/monitor';
-import type { MonitorLaufzeit } from '../monitor/db';
+import { wirksameStabilitaet, type MonitorLaufzeit } from '../monitor/db';
 import type { Tx } from '../zuordnung/db';
 
 /** Every database statement the time scheduler needs, so the modules above it stay comparisons. */
@@ -251,6 +251,7 @@ export async function claimZeitKandidaten(
 			zaehlerObergrenze: monitor.zaehlerObergrenze,
 			zaehlerUntergrenze: monitor.zaehlerUntergrenze,
 			sollGeprueftBisAm: monitor.sollGeprueftBisAm,
+			entwarnungsStabilitaetSekunden: wirksameStabilitaet,
 			offenerUebergangId: uebergang.id,
 			verschaerftAm: uebergang.verschaerftAm,
 			letztesVorkommenAm: uebergang.letztesVorkommenAm

@@ -43,6 +43,13 @@
       "when": 1785271133178,
       "tag": "0005_zeit_scheduler",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785324133923,
+      "tag": "0006_alarm_lebenszyklus",
+      "breakpoints": true
     }
   ]
 }
