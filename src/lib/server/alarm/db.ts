@@ -338,6 +338,52 @@ export async function ladeOffeneZustellungen(
 	}));
 }
 
+/** One delivery, as the channel worker executing it needs it (#28, #29). */
+export interface ZustellAuftrag {
+	ereignis: AlarmEreignis;
+	/** The episode that owes this event — provenance for the ticket correlation. */
+	uebergangId: string;
+	episode: EpisodenSicht;
+}
+
+/**
+ * Reads a single delivery by id — the single-row sibling of `ladeOffeneZustellungen`.
+ *
+ * The queue job carries nothing but the delivery id, and everything else is derived here. That is
+ * deliberate: a channel worker needs the database anyway to record the outcome, so re-reading costs
+ * nothing extra and removes the second place a date could be serialised wrong. `zustellung.ereignis`
+ * pins which of the episode's events this is, so the reconstruction is exact rather than guessed.
+ *
+ * Null when the row is gone — its episode was deleted with its monitor, and the job has nothing
+ * left to deliver.
+ */
+export async function ladeZustellung(
+	zustellungId: string,
+	db: Ausfuehrer = getDb()
+): Promise<ZustellAuftrag | null> {
+	const [zeile] = await db
+		.select({
+			...episodenFelder,
+			ereignis: zustellung.ereignis,
+			uebergangId: uebergang.id
+		})
+		.from(zustellung)
+		.innerJoin(uebergang, eq(uebergang.id, zustellung.uebergangId))
+		.innerJoin(monitor, eq(monitor.id, uebergang.monitorId))
+		.innerJoin(kunde, eq(kunde.id, monitor.kundeId))
+		.leftJoin(vorgaenger, eq(vorgaenger.id, uebergang.vorgaengerId))
+		.where(eq(zustellung.id, zustellungId))
+		.limit(1);
+
+	if (!zeile) return null;
+
+	return {
+		ereignis: zeile.ereignis,
+		uebergangId: zeile.uebergangId,
+		episode: alsSicht(zeile)
+	};
+}
+
 /**
  * Notes the queue job behind a delivery.
  *
@@ -376,6 +422,31 @@ export async function vermerkeZustellung(
 			letzterFehler: fehler,
 			zugestelltAm: zustand === 'zugestellt' ? jetzt : null,
 			versuche: sql`${zustellung.versuche} + 1`
+		})
+		.where(eq(zustellung.id, zustellungId));
+}
+
+/**
+ * The dead letter: this delivery will not be attempted again (SPEC §7, "nach N erschöpften
+ * Versuchen gilt die Alarm-Zustellung als gestört").
+ *
+ * Separate from `vermerkeZustellung` because this is not an attempt — it neither made a request nor
+ * learned anything new. It therefore leaves `versuche` alone and **keeps** the diagnosis the last
+ * real attempt wrote; only a delivery that never got as far as recording one falls back to the
+ * generic sentence.
+ *
+ * The resulting row is the hook the global self-monitor reads (SPEC §8, #30), and it is what
+ * releases the target's blocked chain — see `ladeOffeneZustellungen`.
+ */
+export async function markiereFehlgeschlagen(
+	zustellungId: string,
+	db: Ausfuehrer = getDb()
+): Promise<void> {
+	await db
+		.update(zustellung)
+		.set({
+			zustand: 'fehlgeschlagen',
+			letzterFehler: sql`coalesce(${zustellung.letzterFehler}, 'Zustellung nach erschöpften Versuchen aufgegeben')`
 		})
 		.where(eq(zustellung.id, zustellungId));
 }
