@@ -15,6 +15,7 @@ import { createQueueClient, PGBOSS_SCHEMA } from '../lib/server/queue';
 import { startIngestionScheduler } from '../lib/server/ingestion/scheduler';
 import { startZuordnungScheduler } from '../lib/server/zuordnung/scheduler';
 import { startZeitScheduler } from '../lib/server/zeit/scheduler';
+import { startAlarmScheduler } from '../lib/server/alarm/scheduler';
 import { monitorStufe } from '../lib/server/monitor/pipeline';
 
 const log = createLogger('worker');
@@ -56,6 +57,12 @@ log.info('zuordnung scheduler started', { tickMs: env.zuordnungTickMs });
 const zeit = startZeitScheduler({ tickMs: env.zeitTickMs });
 log.info('zeit scheduler started', { tickMs: env.zeitTickMs });
 
+// The alarm lifecycle's outbox (SPEC §6–7): transitions are written by the two loops above, inside
+// their transactions; this one turns them into outside effects. Without it the dashboard would be
+// live and every ticket and webhook silent.
+const alarm = startAlarmScheduler({ tickMs: env.alarmTickMs });
+log.info('alarm scheduler started', { tickMs: env.alarmTickMs });
+
 log.info('worker ready', { version: env.appVersion });
 
 let shuttingDown = false;
@@ -66,6 +73,7 @@ async function shutdown(signal: string): Promise<void> {
 	ingestion.stop();
 	zuordnung.stop();
 	zeit.stop();
+	alarm.stop();
 	heartbeat.stop();
 	watchdog.stop();
 	await boss.stop({ graceful: true }).catch((err: unknown) => {

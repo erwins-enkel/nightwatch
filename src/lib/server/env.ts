@@ -72,6 +72,20 @@ export const env = {
 	 * well below the smallest sensible Karenz.
 	 */
 	zeitTickMs: positiveSeconds('ZEIT_TICK_SECONDS', process.env.ZEIT_TICK_SECONDS, 30),
+	/**
+	 * How often the worker publishes due alarm events and hands deliveries to their queue.
+	 *
+	 * Short, because it bounds how late an alarm leaves the instance — „Alarme müssen schnell sein"
+	 * (CONTEXT „Entwarnungs-Stabilität"). It also bounds how long the next instruction of a monitor
+	 * waits behind its predecessor, which is the price of keeping ticket operations in order.
+	 */
+	alarmTickMs: positiveSeconds('ALARM_TICK_SECONDS', process.env.ALARM_TICK_SECONDS, 10),
+	/**
+	 * Public origin of the dashboard — the same value SvelteKit needs for form actions, and the
+	 * base of every Rückverweis deep link an alarm carries (CONTEXT). The worker builds those, so
+	 * it is read here rather than from `$app/environment`.
+	 */
+	basisUrl: process.env.ORIGIN?.trim() || 'http://localhost:3000',
 	/** Touched on every main-loop tick; the container healthcheck reads its mtime. */
 	livenessFile: process.env.LIVENESS_FILE?.trim() || '/tmp/nightwatch-alive'
 } as const;

@@ -17,6 +17,10 @@ x-app-env: &app-env
   INGESTION_TICK_SECONDS: ${INGESTION_TICK_SECONDS:-15}
   ZUORDNUNG_TICK_SECONDS: ${ZUORDNUNG_TICK_SECONDS:-10}
   ZEIT_TICK_SECONDS: ${ZEIT_TICK_SECONDS:-30}
+  ALARM_TICK_SECONDS: ${ALARM_TICK_SECONDS:-10}
+  # Shared, not web-only: the worker builds the Rückverweis deep link every alarm carries, so it
+  # needs the same public origin the dashboard is served under.
+  ORIGIN: ${ORIGIN:-http://localhost:3000}
   LOG_LEVEL: ${LOG_LEVEL:-info}
   # Encrypts stored credentials (SPEC §12). Deliberately not `:?` — the stack has to come up
   # without it so an operator can reach the settings page; it is required at the moment a mailbox
@@ -64,7 +68,6 @@ services:
     environment:
       <<: *app-env
       PORT: 3000
-      ORIGIN: ${ORIGIN:-http://localhost:3000}
     ports:
       - '${WEB_PORT:-3000}:3000'
     depends_on:

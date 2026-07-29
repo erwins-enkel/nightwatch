@@ -61,6 +61,17 @@ export const uebergang = pgTable(
 		verschaerftAm: timestamp('verschaerft_am', { withTimezone: true }),
 
 		begonnenAm: timestamp('begonnen_am', { withTimezone: true }).notNull().defaultNow(),
+		/**
+		 * When the `alarm` event was handed to the Alarmwege (#27) — the outbox marker beside
+		 * `verschaerfung_gemeldet_am` and `entwarnt_am`.
+		 *
+		 * A transition is written inside the transaction that decided it; sending from there would
+		 * either publish what a rollback takes back or lose the event on a crash. So the publisher
+		 * derives its work from these three columns instead, exactly like every other loop in this
+		 * service derives its work from rows.
+		 */
+		alarmiertAm: timestamp('alarmiert_am', { withTimezone: true }),
+		verschaerfungGemeldetAm: timestamp('verschaerfung_gemeldet_am', { withTimezone: true }),
 		/** Feeds Auto-Zurück: "no new occurrence for the configured time" (CONTEXT). */
 		letztesVorkommenAm: timestamp('letztes_vorkommen_am', { withTimezone: true })
 			.notNull()
@@ -71,6 +82,15 @@ export const uebergang = pgTable(
 		beendetAm: timestamp('beendet_am', { withTimezone: true }),
 		/** When the Entwarnung actually went out, i.e. after the stability window held. */
 		entwarntAm: timestamp('entwarnt_am', { withTimezone: true }),
+		/**
+		 * When it became certain that this all-clear will never go out: the monitor broke again
+		 * *within* the stability window, so the recovery did not hold (CONTEXT
+		 * „Entwarnungs-Stabilität"). Written by the successor episode as it opens.
+		 *
+		 * Recorded at that moment rather than re-derived on every tick — otherwise every suppressed
+		 * episode would be scanned forever, and the rule would live in two places.
+		 */
+		entwarnungEntfaelltAm: timestamp('entwarnung_entfaellt_am', { withTimezone: true }),
 		erholungsArt: erholungsArt('erholungs_art'),
 
 		/** Pure dashboard marker without outside effect; expires with the recovery (CONTEXT). */
@@ -89,6 +109,22 @@ export const uebergang = pgTable(
 		}).onDelete('set null'),
 		index('uebergang_monitor_begonnen_idx').on(t.monitorId, t.begonnenAm.desc()),
 		index('uebergang_selbst_monitor_begonnen_idx').on(t.selbstMonitorId, t.begonnenAm.desc()),
+		/** Reads the predecessor when an episode opens, and the chain in the alarm history. */
+		index('uebergang_vorgaenger_idx').on(t.vorgaengerId),
+		/**
+		 * The publisher's claim (#27), in the order it publishes: episode by episode, oldest first.
+		 *
+		 * The predicate is the claim's `WHERE` verbatim, so the planner can prove the implication.
+		 * It keeps the index to the handful of episodes that still owe an event — the table itself
+		 * is permanent history (SPEC §11) and grows without bound.
+		 */
+		index('uebergang_veroeffentlichung_offen_idx').on(t.begonnenAm, t.id)
+			.where(sql`alarmiert_am is null
+				or (verschaerft_am is not null and verschaerfung_gemeldet_am is null)
+				or (
+					beendet_am is not null and entwarnt_am is null
+					and entwarnung_entfaellt_am is null and erholungs_art <> 'archiviert'
+				)`),
 		/** At most one open episode per monitor — "ein Alarm pro Übergang" (SPEC §6). */
 		uniqueIndex('uebergang_offen_je_monitor_key')
 			.on(t.monitorId)
@@ -111,6 +147,20 @@ export const uebergang = pgTable(
 		check(
 			'uebergang_entwarnung_nach_erholung',
 			sql`entwarnt_am is null or (beendet_am is not null and entwarnt_am >= beendet_am)`
+		),
+		/** A Verschärfung can only be reported once it happened. */
+		check(
+			'uebergang_verschaerfung_gemeldet_nach_verschaerfung',
+			sql`verschaerfung_gemeldet_am is null or verschaerft_am is not null`
+		),
+		/**
+		 * An episode's all-clear either went out or was cancelled — never both, and neither before
+		 * the recovery it would report.
+		 */
+		check(
+			'uebergang_entwarnung_ausgang_eindeutig',
+			sql`(entwarnt_am is null or entwarnung_entfaellt_am is null)
+				and (entwarnung_entfaellt_am is null or beendet_am is not null)`
 		)
 	]
 );

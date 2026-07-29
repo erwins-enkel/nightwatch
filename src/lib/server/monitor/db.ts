@@ -1,7 +1,8 @@
-import { and, asc, eq, gt, gte, inArray, isNull, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lte, sql } from 'drizzle-orm';
 import type { PgUpdateSetSource } from 'drizzle-orm/pg-core';
 import { getDb } from '../db/client';
-import { kunde, mail, monitor, regel, uebergang } from '../db/schema';
+import { einstellungen, kunde, mail, monitor, regel, uebergang } from '../db/schema';
+import { erholungHielt, STABILITAET_FALLBACK_SEKUNDEN } from '../alarm/lebenszyklus';
 import type {
 	Alarmgrund,
 	ErholungsArt,
@@ -113,10 +114,28 @@ export interface MonitorLaufzeit {
 	maxOffenzeitSekunden: number | null;
 	zaehlerFensterSekunden: number | null;
 	zaehlerObergrenze: number | null;
+	/**
+	 * The monitor's own Entwarnungs-Stabilität or, where it has none, the instance's — already
+	 * resolved, so the two places that judge a recovery cannot read different windows.
+	 */
+	entwarnungsStabilitaetSekunden: number;
 	/** The episode that is currently open, if any. */
 	offenerUebergangId: string | null;
 	verschaerftAm: Date | null;
 }
+
+/**
+ * CONTEXT „Entwarnungs-Stabilität": per-monitor override over the instance-wide default.
+ *
+ * A scalar subquery rather than a join — `einstellungen` is a singleton, so Postgres evaluates it
+ * once per statement, and every claim that builds a `MonitorLaufzeit` can reuse the expression
+ * without changing its shape.
+ */
+export const wirksameStabilitaet = sql<number>`coalesce(
+	${monitor.entwarnungsStabilitaetSekunden},
+	(select ${einstellungen.entwarnungsStabilitaetSekunden} from ${einstellungen} limit 1),
+	${STABILITAET_FALLBACK_SEKUNDEN}
+)`;
 
 /** The locked row, before the open episode is attached to it. */
 type MonitorZeile = Omit<MonitorLaufzeit, 'offenerUebergangId' | 'verschaerftAm'>;
@@ -148,7 +167,8 @@ export async function sperreMonitore(ids: string[], tx: Tx): Promise<Map<string,
 			postfachId: monitor.postfachId,
 			maxOffenzeitSekunden: monitor.maxOffenzeitSekunden,
 			zaehlerFensterSekunden: monitor.zaehlerFensterSekunden,
-			zaehlerObergrenze: monitor.zaehlerObergrenze
+			zaehlerObergrenze: monitor.zaehlerObergrenze,
+			entwarnungsStabilitaetSekunden: wirksameStabilitaet
 		})
 		.from(monitor)
 		.where(inArray(monitor.id, sortiert))
@@ -272,17 +292,25 @@ export async function schreibeWirkung(
 			neu.zustand = 'gestoert';
 			neu.alarmgrund = aenderung.grund;
 
+			const vorgaenger = await juengsteEpisode(laufzeit.id, tx);
+
 			const [zeile] = await tx
 				.insert(uebergang)
 				.values({
 					monitorId: laufzeit.id,
 					alarmgrund: aenderung.grund,
 					begonnenAm: zeitpunkt,
-					letztesVorkommenAm: zeitpunkt
+					letztesVorkommenAm: zeitpunkt,
+					// SPEC §6 „Re-Alarm … mit Vorgänger-Verweis". Linked on every episode, not only
+					// after a closed ticket: it costs one column, makes a flutter chain readable, and
+					// is what the check below needs anyway.
+					vorgaengerId: vorgaenger?.id ?? null
 				})
 				.returning({ id: uebergang.id });
 			neu.offenerUebergangId = zeile.id;
 			neu.verschaerftAm = null;
+
+			await entwerteEntwarnung(vorgaenger, laufzeit.entwarnungsStabilitaetSekunden, zeitpunkt, tx);
 			break;
 		}
 
@@ -343,6 +371,58 @@ export async function schreibeWirkung(
 	}
 
 	return neu;
+}
+
+interface VorgaengerZeile {
+	id: string;
+	beendetAm: Date | null;
+	entwarntAm: Date | null;
+	entwarnungEntfaelltAm: Date | null;
+}
+
+/** The monitor's most recent episode — read under the monitor lock the caller already holds. */
+async function juengsteEpisode(monitorId: string, tx: Tx): Promise<VorgaengerZeile | undefined> {
+	const [zeile] = await tx
+		.select({
+			id: uebergang.id,
+			beendetAm: uebergang.beendetAm,
+			entwarntAm: uebergang.entwarntAm,
+			entwarnungEntfaelltAm: uebergang.entwarnungEntfaelltAm
+		})
+		.from(uebergang)
+		.where(eq(uebergang.monitorId, monitorId))
+		.orderBy(desc(uebergang.begonnenAm), desc(uebergang.id))
+		.limit(1);
+
+	return zeile;
+}
+
+/**
+ * Voids the predecessor's pending Entwarnung when this disruption proves the recovery did not hold
+ * (CONTEXT „Entwarnungs-Stabilität").
+ *
+ * Written here, at the moment it becomes true, rather than re-derived by the publisher on every
+ * tick: the rule then lives in one pure function, the publisher's claim stays a set of null checks,
+ * and a permanently suppressed episode drops out of it instead of being scanned forever.
+ *
+ * `where entwarnt_am is null` decides the race with the publisher. It holds a row lock on the
+ * episode while it publishes, so this update either waits and then finds the all-clear already
+ * sent — and does nothing — or gets there first, and the publisher's claim no longer matches.
+ */
+async function entwerteEntwarnung(
+	vorgaenger: VorgaengerZeile | undefined,
+	stabilitaetSekunden: number,
+	zeitpunkt: Date,
+	tx: Tx
+): Promise<void> {
+	if (!vorgaenger?.beendetAm) return;
+	if (vorgaenger.entwarntAm !== null || vorgaenger.entwarnungEntfaelltAm !== null) return;
+	if (erholungHielt(vorgaenger.beendetAm, stabilitaetSekunden, zeitpunkt)) return;
+
+	await tx
+		.update(uebergang)
+		.set({ entwarnungEntfaelltAm: zeitpunkt })
+		.where(and(eq(uebergang.id, vorgaenger.id), isNull(uebergang.entwarntAm)));
 }
 
 async function zaehleVorkommen(uebergangId: string | null, zeitpunkt: Date, tx: Tx): Promise<void> {
