@@ -82,6 +82,14 @@
 				{m.customer_archived_since()}: {zeitpunkt(kunde.archiviertAm)}
 			</p>
 		{/if}
+		{#if kunde.zustand === 'aktiv'}
+			<a
+				class="w-fit rounded border border-emerald-700 px-3 py-1.5 text-sm text-emerald-300 hover:border-emerald-500"
+				href={resolve(`/monitore/neu?kunde=${encodeURIComponent(kunde.id)}`)}
+			>
+				{m.customer_new_monitor()}
+			</a>
+		{/if}
 	</header>
 
 	{#if form?.erfolg === 'gespeichert'}
