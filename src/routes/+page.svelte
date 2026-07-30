@@ -135,6 +135,9 @@
 			>
 				{m.settings_self_link()}
 			</a>
+			<a class="text-slate-300 hover:text-emerald-300" href={resolve('/health')}>
+				{m.health_link()}
+			</a>
 			<LocaleSwitcher />
 		</nav>
 	</header>
