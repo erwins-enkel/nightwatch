@@ -91,7 +91,10 @@
 		return abfrage === '' ? resolve('/') : resolve(`/?${abfrage}`);
 	}
 
-	const zu = href({ monitor: null, kunde: null });
+	// Abgeleitet, nicht einmalig berechnet: die Seite bleibt bei einer Navigation innerhalb der
+	// Route stehen, und ein festgehaltenes `zu` würfe beim Schließen der Schublade den Filter weg,
+	// mit dem sie geöffnet wurde.
+	const zu = $derived(href({ monitor: null, kunde: null }));
 	const detail = $derived(data.monitorDetail);
 	const kunde = $derived(data.kundenDetail);
 
