@@ -1,8 +1,10 @@
 import { getDb } from '../db/client';
 import type { Klassifikation } from '../db/schema/enums';
+import { ladeZeitzone } from '../zeit/db';
 import { bestimmeKunde, type MerkmalZeile } from './engine';
 import { betreffMuster, sortenSignatur } from './sorte';
 import {
+	aktualisiereSortenTakt,
 	claimUnverarbeitete,
 	ladeMerkmalIndex,
 	schreibeErgebnisse,
@@ -142,6 +144,12 @@ export async function verarbeiteStapel(optionen: StapelOptionen = {}): Promise<n
 			jetzt,
 			tx
 		);
+
+		// Also after the write: the recomputation reads `mail.sorte_id`, which `schreibeErgebnisse`
+		// has just set. Only the Sorten this batch touched — the Takt of the others cannot have moved.
+		if (sorteIds.size > 0) {
+			await aktualisiereSortenTakt([...sorteIds.values()], await ladeZeitzone(tx), tx);
+		}
 
 		// After the write, so the Zähler's window sees this batch's mails as rows.
 		if (ausgewertet.length > 0) await stufe.werteAus(ausgewertet, jetzt);
