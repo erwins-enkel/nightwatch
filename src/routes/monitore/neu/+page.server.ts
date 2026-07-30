@@ -29,7 +29,8 @@ import {
 	ladeQuelleAusSorte,
 	ladeSortenAnkunftszeiten,
 	ladeSortenVerlauf,
-	listeVorlagen
+	listeVorlagen,
+	type VorlagenZeile
 } from '$lib/server/regel/db';
 import { vorlageAlsRegel } from '$lib/server/regel/vorlage';
 import { ladeZeitzone } from '$lib/server/zeit/db';
@@ -95,6 +96,12 @@ export const load: PageServerLoad = async ({ url }) => {
 			? await ladeQuelleAusSorte(sorteId)
 			: undefined;
 
+	// Erst nachsehen, ob es die Vorlage überhaupt gibt. Ein Link mit einer gelöschten (oder frei
+	// erfundenen) Id darf nicht als „angewandt" durchgehen: die Id wanderte sonst in verborgenen
+	// Feldern bis zum Anlegen durch und schlüge dort als Fremdschlüssel-Verletzung auf `regel`
+	// fehl — ausgerechnet im Moment der Bestätigung, nach vier ausgefüllten Schritten.
+	const vorlage = vorlageId ? await holeVorlage(vorlageId) : undefined;
+
 	// Aus einer Vorlage *und* aus einer Mail gleichzeitig vorzubefüllen wäre nicht auflösbar — die
 	// Mail gewinnt, weil sie das konkretere Material ist. Die Vorlage bleibt im Schritt 1 wählbar.
 	const vorbefuellung: Vorbefuellung | null = quelle
@@ -103,8 +110,8 @@ export const load: PageServerLoad = async ({ url }) => {
 				quelle.takt,
 				quelle.sortenAnzahl
 			)
-		: vorlageId
-			? await vorlageAlsVorbefuellung(vorlageId)
+		: vorlage
+			? vorlageAlsVorbefuellung(vorlage)
 			: null;
 
 	return {
@@ -121,7 +128,8 @@ export const load: PageServerLoad = async ({ url }) => {
 		})),
 		quelle: quelle ?? null,
 		vorbefuellung,
-		vorlageId: vorlageId ?? '',
+		// Nur eine Vorlage, die es wirklich gibt (siehe oben).
+		vorlageId: vorlage?.id ?? '',
 		kundeId: url.searchParams.get('kunde') ?? quelle?.kundeId ?? '',
 		/**
 		 * Der Query-String, an den die Formular-Aktionen gehängt werden.
@@ -150,10 +158,7 @@ function ohneAktion(url: URL): string {
 	return text === '' ? '' : `?${text}`;
 }
 
-async function vorlageAlsVorbefuellung(vorlageId: string): Promise<Vorbefuellung | null> {
-	const zeile = await holeVorlage(vorlageId);
-	if (!zeile) return null;
-
+function vorlageAlsVorbefuellung(zeile: VorlagenZeile): Vorbefuellung {
 	const vorlage = alsEintrag(zeile);
 	return {
 		bezeichnung: vorlage.name,
@@ -227,8 +232,16 @@ async function nachgelagerteVorschlaege(
 	art: MonitorArt,
 	eingaben: WizardEingaben,
 	daten: FormData,
-	sorteId: string | null
+	url: URL
 ): Promise<{ eingaben: WizardEingaben; belege: Beleg[] }> {
+	// Nur nachschlagen, wenn ein Vorschlag überhaupt gefragt ist: Heartbeat und Ereignis brauchen
+	// hier nichts, und der Einstieg über `?mail=` kostet sonst eine Abfrage je Schrittwechsel.
+	const braucht =
+		(art === 'paar' && eingaben.maxOffenzeitSekunden === '') ||
+		(art === 'zaehler' && eingaben.zaehlerFensterSekunden === '');
+	if (!braucht) return { eingaben, belege: [] };
+
+	const sorteId = await sorteAus(url);
 	if (!sorteId) return { eingaben, belege: [] };
 
 	if (art === 'paar' && eingaben.maxOffenzeitSekunden === '') {
@@ -262,10 +275,29 @@ async function nachgelagerteVorschlaege(
 	return { eingaben, belege: [] };
 }
 
+/**
+ * Die Sorte, aus der die nachgelagerten Vorschläge schöpfen.
+ *
+ * `?sorte=` nennt sie direkt; `?mail=` **nicht** — dort steht sie auf der Mail. Sie nur aus der URL
+ * zu lesen hieße, dass ausgerechnet der Einstieg „aus Mail ableiten" ohne Paar- und
+ * Zähler-Vorschlag dastünde, obwohl das Material da ist.
+ */
+async function sorteAus(url: URL): Promise<string | null> {
+	const sorteId = url.searchParams.get('sorte');
+	if (sorteId) return sorteId;
+
+	const mailId = url.searchParams.get('mail');
+	if (!mailId) return null;
+
+	return (await ladeQuelleAusMail(mailId))?.sorteId ?? null;
+}
+
 /** Eine im Schritt 1 gewählte Vorlage in die Felder schreiben. */
 async function wendeVorlageAn(eingaben: WizardEingaben): Promise<WizardEingaben> {
 	const zeile = await holeVorlage(eingaben.vorlageId);
-	if (!zeile) return { ...eingaben, vorlageAngewandt: eingaben.vorlageId };
+	// Verschwundene Vorlage (gelöscht, während das Formular offen stand): Wahl und Markierung
+	// zurücksetzen, statt eine Id weiterzureichen, die beim Anlegen den Fremdschlüssel bricht.
+	if (!zeile) return { ...eingaben, vorlageId: '', vorlageAngewandt: '' };
 
 	const vorlage = alsEintrag(zeile);
 	const parameter = vorlage.parameterDefaults ?? {};
@@ -305,10 +337,11 @@ function parameterFelder(parameter: MonitorParameter) {
  * Woher die Regel stammt (CONTEXT „Regel-Quelle").
  *
  * Die zuletzt angewandte Vorlage gewinnt: wer eine Vorlage über eine abgeleitete Vorbefüllung legt,
- * hat am Ende die Vorlage vor sich.
+ * hat am Ende die Vorlage vor sich. `vorlageId` ist hier bereits geprüft — eine Vorlage, die es
+ * nicht mehr gibt, ist auch keine Herkunft.
  */
-function quelleAus(eingaben: WizardEingaben, url: URL): RegelQuelle {
-	if (eingaben.vorlageAngewandt !== '') return 'vorlage';
+function quelleAus(vorlageId: string | null, url: URL): RegelQuelle {
+	if (vorlageId !== null) return 'vorlage';
 	if (url.searchParams.has('mail') || url.searchParams.has('sorte')) return 'abgeleitet';
 	return 'manuell';
 }
@@ -335,7 +368,7 @@ export const actions: Actions = {
 		const art = eingaben.art;
 		const { eingaben: ergaenzt, belege } =
 			ziel === 4 && istArt(art)
-				? await nachgelagerteVorschlaege(art, eingaben, daten, url.searchParams.get('sorte'))
+				? await nachgelagerteVorschlaege(art, eingaben, daten, url)
 				: { eingaben, belege: [] };
 
 		return { schritt: ziel, eingaben: ergaenzt, fehler: [] as string[], belege };
@@ -355,6 +388,16 @@ export const actions: Actions = {
 			return fail(400, { schritt: 1, eingaben, fehler: ['kunde_fehlt'], belege: [] });
 		}
 
+		// Die Herkunfts-Verknüpfung wird hier noch einmal nachgesehen, und zwar an genau der einen
+		// Stelle, an der sie in die Datenbank geht. `vorlage_id` ist ein Fremdschlüssel: eine Id, die
+		// zwischen Schritt 1 und der Bestätigung gelöscht wurde, ließe das Anlegen sonst mit einem
+		// 500 scheitern — im teuersten Moment, wenn vier Schritte Arbeit dranhängen. Ohne Vorlage
+		// angelegt zu werden ist das mildere Ergebnis: die Regel steht ja fertig im Formular.
+		const vorlageId =
+			eingaben.vorlageAngewandt === ''
+				? null
+				: ((await holeVorlage(eingaben.vorlageAngewandt))?.id ?? null);
+
 		const ergebnis = await legeMonitorAn({
 			kundeId: eingaben.kundeId,
 			bezeichnung: eingaben.bezeichnung,
@@ -362,8 +405,8 @@ export const actions: Actions = {
 			parameter: parameterAus(daten),
 			entwarnungsStabilitaetSekunden: zahl(eingaben.entwarnungsStabilitaetSekunden) ?? null,
 			regel: regelAus(daten),
-			quelle: quelleAus(eingaben, url),
-			vorlageId: eingaben.vorlageAngewandt === '' ? null : eingaben.vorlageAngewandt
+			quelle: quelleAus(vorlageId, url),
+			vorlageId
 		});
 
 		if (ergebnis.art !== 'ok') {

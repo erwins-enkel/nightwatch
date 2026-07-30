@@ -162,6 +162,49 @@ describe('erkenneTakt', () => {
 		});
 	});
 
+	/**
+	 * CONTEXT „Takt": „Monatlich bewusst nicht … Monats-Reports legt der Mensch als Kalenderplan
+	 * an." Ohne Obergrenze käme so ein Report als Intervall „alle ~30 Tage" durch — die
+	 * schwankenden Monatslängen passen bequem in 25 % Toleranz —, und damit als gleitende
+	 * Erwartung, die mit jedem verspäteten Lauf mitwandert.
+	 */
+	it('schlägt einen Monats-Report nicht als Intervall vor', () => {
+		const zeiten = [
+			berlin('2026-01-01', '06:00'),
+			berlin('2026-02-01', '06:00'),
+			berlin('2026-03-01', '06:00'),
+			berlin('2026-04-01', '06:00'),
+			berlin('2026-05-01', '06:00')
+		];
+
+		expect(erkenneTakt(zeiten, ZONE)).toBeNull();
+	});
+
+	it('schlägt auch alles andere jenseits einer Woche nicht vor', () => {
+		const zeiten = ausAbstaenden(berlin('2026-03-02', '08:00'), [
+			10 * 86_400,
+			10 * 86_400,
+			10 * 86_400
+		]);
+
+		expect(erkenneTakt(zeiten, ZONE)).toBeNull();
+	});
+
+	it('lässt eine Periode bis zu einer Woche zu', () => {
+		// Sechs Tage: keiner Kalender-Klasse zuzuordnen (der Wochentag wandert), aber ein
+		// belastbarer Rhythmus — und diesseits der Grenze.
+		const zeiten = ausAbstaenden(berlin('2026-03-02', '08:00'), [
+			6 * 86_400,
+			6 * 86_400,
+			6 * 86_400
+		]);
+
+		expect(erkenneTakt(zeiten, ZONE)).toMatchObject({
+			klasse: 'intervall',
+			intervallSekunden: 6 * 86_400
+		});
+	});
+
 	it('erkennt in unregelmäßigen Eingängen nichts', () => {
 		const zeiten = ausAbstaenden(berlin('2026-03-02', '08:00'), [600, 43_200, 3_600, 250_000]);
 

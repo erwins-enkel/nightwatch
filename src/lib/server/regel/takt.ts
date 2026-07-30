@@ -51,6 +51,25 @@ export const TAKT_MAX_VORKOMMEN = 200;
 
 const TAG_SEKUNDEN = 86_400;
 
+/**
+ * Die längste Periode, die als **Intervall** vorgeschlagen wird — eine Woche.
+ *
+ * CONTEXT nennt vier Klassen, und die längste davon ist `woechentlich`. Alles darüber ist die
+ * Gegend, die dort ausdrücklich ausgeschlossen ist: *„Monatlich bewusst nicht — das Lernfenster
+ * gibt keine 3 Vorkommen her; Monats-Reports legt der Mensch als Kalenderplan an."*
+ *
+ * Ohne diese Grenze käme ein Monats-Report trotzdem durch, nur unter falschem Namen: seine Abstände
+ * sind 28–31 Tage, der Median ~30, und 25 % davon sind siebeneinhalb Tage Toleranz — die
+ * Monatslängen schwanken bequem darin. Das Ergebnis wäre eine Intervall-Erwartung „alle ~30 Tage",
+ * die genau das ist, was CONTEXT nicht will: ein gleitendes „spätestens alle X", das mit jedem
+ * verspäteten Lauf mitwandert, statt eines Kalenderplans mit festem Soll-Zeitpunkt.
+ *
+ * Das Lernfenster (~30 Tage) kann eine solche Periode ohnehin nicht mit drei Vorkommen belegen; die
+ * Grenze wird erst wirksam, wenn sich über Wochen genug Historie angesammelt hat — und dann ist sie
+ * genau richtig.
+ */
+export const TAKT_MAX_INTERVALL_SEKUNDEN = 7 * TAG_SEKUNDEN;
+
 export interface Takt {
 	klasse: TaktKlasse;
 	/** Nur bei `intervall`. */
@@ -264,6 +283,7 @@ function intervallTakt(zeiten: Date[]): Takt | null {
 	// Mehrheitlich gleichzeitige Mails sind kein Rhythmus; ohne diese Sperre teilte die Rechnung
 	// unten durch null.
 	if (median <= 0) return null;
+	if (median > TAKT_MAX_INTERVALL_SEKUNDEN) return null;
 
 	let streuung = 0;
 	let sollZeitpunkte = 0;

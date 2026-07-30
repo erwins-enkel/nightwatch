@@ -51,6 +51,12 @@ describe.skipIf(!databaseUrl && !process.env.CI)('Monitor-CRUD', () => {
 	beforeEach(async () => {
 		await db.delete(schema.postfach);
 		await db.delete(schema.kunde);
+		// Die Vorlage, die der Herkunfts-Test anlegt, hängt an keinem Kunden und überlebt die beiden
+		// Zeilen darüber. Sie trägt einen eindeutigen Schlüssel, also scheitert der zweite Lauf gegen
+		// dieselbe Datenbank an ihr — je nachdem, ob eine andere Suite die Tabelle zwischendurch
+		// geleert hat. Hier wegzuräumen ist billiger, als die Reihenfolge zu einer Zusicherung zu
+		// machen.
+		await db.delete(schema.regelVorlage);
 
 		const [zeile] = await db
 			.insert(schema.postfach)
