@@ -26,6 +26,11 @@ COPY src ./src
 COPY drizzle ./drizzle
 COPY docker/entrypoint.sh ./docker/entrypoint.sh
 
+# The watchdog's encrypted cache lives here (SPEC §8). Created *before* USER so the named volume
+# Compose mounts over it inherits this ownership — Docker seeds an empty volume from the image path,
+# and without it the directory would come up root-owned and the non-root watchdog could not write.
+RUN mkdir -p /var/lib/nightwatch && chown bun:bun /var/lib/nightwatch
+
 # `bun` is the non-root user shipped with the base image (SPEC §12 container hardening).
 USER bun
 

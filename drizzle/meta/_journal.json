@@ -57,6 +57,13 @@
       "when": 1785333405011,
       "tag": "0007_webhook_ziel",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1785341284282,
+      "tag": "0008_selbstueberwachung",
+      "breakpoints": true
     }
   ]
 }

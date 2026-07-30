@@ -171,7 +171,9 @@ async function veroeffentlicheSeite(
  * delivery id is the job's identity.
  */
 async function uebergebeOffene(basisUrl: string, db: ReturnType<typeof getDb>): Promise<number> {
-	const koepfe = await ladeOffeneZustellungen(ZIELE_PRO_TICK, db);
+	// Customer deliveries only. Self-monitor deliveries belong to the watchdog's own path (SPEC §8);
+	// handing them to pg-boss as well would send every self-alarm twice.
+	const koepfe = await ladeOffeneZustellungen(ZIELE_PRO_TICK, 'kunde', db);
 
 	if (koepfe.length === ZIELE_PRO_TICK) {
 		// Whole chains are postponed to the next tick, never hidden behind one another — but this

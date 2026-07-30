@@ -170,14 +170,29 @@ export interface Korrelation {
 }
 
 /**
+ * Whose ticket this is. `ticket_korrelation` hangs on exactly one of two columns (CHECK
+ * `ticket_korrelation_genau_ein_monitor`), and each has its own partial unique index for
+ * „ein offenes Ticket pro Monitor" — a self-monitor's tickets are guaranteed the same way a
+ * customer monitor's are (SPEC §6, §8).
+ */
+export type KorrelationsAnker = { monitorId: string } | { selbstMonitorId: string };
+
+function gehoertZu(anker: KorrelationsAnker) {
+	return 'monitorId' in anker
+		? eq(ticketKorrelation.monitorId, anker.monitorId)
+		: eq(ticketKorrelation.selbstMonitorId, anker.selbstMonitorId);
+}
+
+/**
  * The monitor's open ticket, if it has one.
  *
  * A ticket outlives its episode — Erledigen and Auto-Zurück only comment — so a re-alarm has to
- * attach to it instead of opening a second one. The partial unique index
- * `ticket_offen_je_monitor_key` guarantees there is at most one row to find.
+ * attach to it instead of opening a second one. The partial unique indexes
+ * `ticket_offen_je_monitor_key` / `ticket_offen_je_selbst_monitor_key` guarantee there is at most
+ * one row to find.
  */
 export async function holeOffeneKorrelation(
-	monitorId: string,
+	anker: KorrelationsAnker,
 	db: Ausfuehrer = getDb()
 ): Promise<Korrelation | null> {
 	const [zeile] = await db
@@ -188,7 +203,7 @@ export async function holeOffeneKorrelation(
 			ticketNummer: ticketKorrelation.ticketNummer
 		})
 		.from(ticketKorrelation)
-		.where(and(eq(ticketKorrelation.monitorId, monitorId), eq(ticketKorrelation.zustand, 'offen')))
+		.where(and(gehoertZu(anker), eq(ticketKorrelation.zustand, 'offen')))
 		.limit(1);
 
 	return zeile ?? null;
@@ -199,13 +214,13 @@ export async function holeOffeneKorrelation(
  * after a closed ticket carries (SPEC §6).
  */
 export async function letzteTicketNummer(
-	monitorId: string,
+	anker: KorrelationsAnker,
 	db: Ausfuehrer = getDb()
 ): Promise<string | null> {
 	const [zeile] = await db
 		.select({ ticketNummer: ticketKorrelation.ticketNummer })
 		.from(ticketKorrelation)
-		.where(and(eq(ticketKorrelation.monitorId, monitorId), isNotNull(ticketKorrelation.angelegtAm)))
+		.where(and(gehoertZu(anker), isNotNull(ticketKorrelation.angelegtAm)))
 		.orderBy(desc(ticketKorrelation.angelegtAm))
 		.limit(1);
 
@@ -213,7 +228,7 @@ export async function letzteTicketNummer(
 }
 
 export interface TicketVermerk {
-	monitorId: string;
+	anker: KorrelationsAnker;
 	uebergangId: string;
 	korrelationsKey: string;
 	ticketId: string;
@@ -232,7 +247,7 @@ export async function merkeTicket(vermerk: TicketVermerk, db: Ausfuehrer = getDb
 	await db
 		.insert(ticketKorrelation)
 		.values({
-			monitorId: vermerk.monitorId,
+			...vermerk.anker,
 			uebergangId: vermerk.uebergangId,
 			korrelationsKey: vermerk.korrelationsKey,
 			ticketId: vermerk.ticketId,

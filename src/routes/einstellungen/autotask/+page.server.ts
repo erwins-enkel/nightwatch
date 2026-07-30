@@ -103,7 +103,10 @@ const ID_FELDER = [
 	['arbeitstypId', 'arbeitstypId'],
 	['notizTypId', 'notizTypId'],
 	['notizPublishId', 'notizPublishId'],
-	['faelligkeitStunden', 'faelligkeitStunden']
+	['faelligkeitStunden', 'faelligkeitStunden'],
+	// SPEC §8: ein Selbst-Monitor gehört keinem Kunden, braucht für Autotask aber trotzdem eine
+	// Firma. Ohne diese Angabe plant der Watchdog schlicht keine Autotask-Zustellung.
+	['selbstCompanyId', 'selbstCompanyId']
 ] as const;
 
 export const actions: Actions = {

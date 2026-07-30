@@ -220,6 +220,35 @@ Bestands-Postfach weiter, auch an die gerade gestörten, und der erste Tick nach
 sonst fiele ausgerechnet das ahnungsloseste Postfach aus der Schranke. Kosten: ein Poll-Intervall
 nach einem Update, die Dauer eines Backfills beim Verbinden eines Postfachs — beides geloggt.
 
+### Der Dead Letter trägt seinen eigenen Zeitpunkt
+
+`zustellung.aufgegeben_am` steht neben `zugestellt_am`, und `zustellung_abschluss_zum_zustand`
+koppelt beide an den Zustand: `zugestellt` genau dann mit `zugestellt_am`, `fehlgeschlagen` genau
+dann mit `aufgegeben_am`.
+
+Ohne den zweiten Zeitpunkt wäre „ist die Alarm-Zustellung **jetzt** gestört?" nicht entscheidbar.
+`erstellt_am` sagt, wann die Zustellung geplant wurde — das kann Stunden vor dem letzten
+erschöpften Versuch liegen. Der globale Selbst-Monitor (SPEC §8) vergleicht **je Ziel**
+(`kanal` × `webhook_ziel_id`) den jüngsten Dead Letter gegen den jüngsten Erfolg; dafür braucht die
+Störung einen Zeitpunkt, der ihr gehört.
+
+Die beiden Mengen sind dabei bewusst verschieden: gezählt werden nur Dead Letter von
+**Kunden**-Zustellungen (sonst meldete ein Kanal sein eigenes Scheitern als neue Kern-Störung),
+Erfolge dagegen **alle**, Selbst-Zustellungen eingeschlossen — ein durchgekommener Selbst-Alarm ist
+der Beweis, dass der Empfänger wieder erreichbar ist, und für ein Ziel, an das gerade kein
+Kunden-Ereignis geht, der einzige.
+
+### Die Fehlerklasse eines Postfachs wird gespeichert, nicht neu hergeleitet
+
+`postfach.letzter_fehler_klasse` hält fest, was `graph/fehler.ts` beim fehlgeschlagenen Poll
+ohnehin schon entschieden hat. SPEC §8 lässt „harte Ursachen" (`zugriff`, `nicht_gefunden` —
+entzogener Consent, `AADSTS*`, 403) den Selbst-Monitor sofort feuern statt die Staleness-Frist
+abzuwarten; würde der Watchdog dafür `letzter_fehler_code` erneut lesen, gäbe es zwei Klassifikatoren,
+die auseinanderlaufen, sobald Graph einen Code hinzufügt.
+
+Bewusst `text` und kein Enum: das ist die technische Einordnung einer fremden API, kein Begriff aus
+CONTEXT.md — und sie darf einen Wert dazubekommen, ohne dafür eine Migration zu verdienen.
+
 ### Zwei Muster-Slots, vier Lesarten
 
 `regel.muster_schlecht` und `regel.muster_gut` sind bewusst generisch benannt. Jede Monitor-Art

@@ -349,7 +349,10 @@ describe.skipIf(!databaseUrl && !process.env.CI)('Datenmodell', () => {
 					webhookZielId: ziel.id,
 					zustand: 'fehlgeschlagen',
 					versuche: 5,
-					letzterFehler: 'dead letter'
+					letzterFehler: 'dead letter',
+					// Ein Dead Letter trägt seinen Zeitpunkt; `zustellung_abschluss_zum_zustand` besteht
+					// darauf, weil der globale Selbst-Monitor genau daran „gerade gestört?" entscheidet.
+					aufgegebenAm: new Date('2026-01-01T06:00:00Z')
 				});
 
 				// Ein Ziel mit Zustellungs-Historie wird nicht hart gelöscht; dafür gibt es `aktiv`.

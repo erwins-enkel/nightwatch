@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray, isNull, notExists, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { getDb } from '../db/client';
-import { kunde, monitor, selbstMonitor, uebergang, zustellung } from '../db/schema';
+import { einstellungen, kunde, monitor, selbstMonitor, uebergang, zustellung } from '../db/schema';
 import type {
 	AlarmEreignis,
 	Alarmgrund,
@@ -14,6 +14,7 @@ import { schreibeWirkung, sperreMonitore, wirksameStabilitaet } from '../monitor
 import { wendeAn } from '../monitor/zustand';
 import type { Tx } from '../zuordnung/db';
 import type { EpisodenSicht } from './ereignis';
+import { STABILITAET_FALLBACK_SEKUNDEN } from './lebenszyklus';
 
 /**
  * Every database statement the alarm lifecycle needs, so the modules above it stay comparisons.
@@ -21,6 +22,19 @@ import type { EpisodenSicht } from './ereignis';
 
 type Db = ReturnType<typeof getDb>;
 type Ausfuehrer = Db | Tx;
+
+/**
+ * The self-monitor's Entwarnungs-Stabilität, resolved against the instance default — the sibling of
+ * `monitor/db.ts` → `wirksameStabilitaet`.
+ *
+ * Same three-step fallback, so a self-monitor's all-clear is damped exactly like a customer
+ * monitor's and the two can never be read against different windows.
+ */
+export const wirksameSelbstStabilitaet = sql<number>`coalesce(
+	${selbstMonitor.entwarnungsStabilitaetSekunden},
+	(select ${einstellungen.entwarnungsStabilitaetSekunden} from ${einstellungen} limit 1),
+	${STABILITAET_FALLBACK_SEKUNDEN}
+)`;
 
 /** The predecessor episode, joined in only for its published id. */
 const vorgaenger = alias(uebergang, 'vorgaenger');
@@ -212,6 +226,42 @@ export async function claimOffeneEpisoden(
 	);
 }
 
+/**
+ * The same claim for **self-monitor** episodes, which the watchdog publishes on its own path
+ * (SPEC §8) — the mirror image of the query above, with the inner join on the other side.
+ *
+ * Self-monitors are few and fixed (one per mailbox plus the core), so this needs no keyset paging:
+ * one page holds every episode that could possibly owe an event.
+ *
+ * No Bewertungs-Schranke is involved anywhere in the watchdog's pass. A self-monitor's recovery is a
+ * successful poll or a fresh heartbeat, not the absence of a mail — nothing travels through the mail
+ * pipeline, so there is no backlog whose draining an all-clear would have to wait for.
+ */
+export async function claimOffeneSelbstEpisoden(limit: number, tx: Tx): Promise<OffeneEpisode[]> {
+	return (
+		tx
+			.select({
+				...episodenFelder,
+				id: uebergang.id,
+				alarmiertAm: uebergang.alarmiertAm,
+				verschaerfungGemeldetAm: uebergang.verschaerfungGemeldetAm,
+				entwarntAm: uebergang.entwarntAm,
+				entwarnungEntfaelltAm: uebergang.entwarnungEntfaelltAm,
+				stabilitaetSekunden: wirksameSelbstStabilitaet
+			})
+			.from(uebergang)
+			.innerJoin(selbstMonitor, eq(selbstMonitor.id, uebergang.selbstMonitorId))
+			// Joined for the shape `alsSicht` reads; the CHECK makes both null in every row this returns.
+			.leftJoin(monitor, eq(monitor.id, uebergang.monitorId))
+			.leftJoin(kunde, eq(kunde.id, monitor.kundeId))
+			.leftJoin(vorgaenger, eq(vorgaenger.id, uebergang.vorgaengerId))
+			.where(OFFEN)
+			.orderBy(asc(uebergang.begonnenAm), asc(uebergang.id))
+			.limit(limit)
+			.for('update', { of: uebergang, skipLocked: true })
+	);
+}
+
 /** Records that an event went out. The marker is what keeps it going out exactly once. */
 export async function markiereVeroeffentlicht(
 	uebergangId: string,
@@ -258,8 +308,23 @@ export interface OffeneZustellung {
 	kanal: ZustellKanal;
 	webhookZielId: string | null;
 	jobId: string | null;
+	versuche: number;
+	/** Its episode is still running — the watchdog reads this before giving up on a delivery. */
+	episodeOffen: boolean;
 	episode: EpisodenSicht;
 }
+
+/**
+ * Who executes a delivery — and therefore which half of the ledger a caller may see.
+ *
+ * There are two executors: the worker hands customer deliveries to pg-boss, the watchdog runs
+ * self-monitor deliveries synchronously on its own path (SPEC §8). Both read the same table, and
+ * the same row must never be taken by both — that would be one alarm sent twice.
+ *
+ * Passed rather than defaulted on purpose: a caller that forgets it is a type error here, instead of
+ * a duplicate ticket in somebody's PSA.
+ */
+export type ZustellUmfang = 'kunde' | 'selbst';
 
 /**
  * The rank of an event within its episode — the order the lifecycle produces them in.
@@ -297,11 +362,19 @@ const MONITOR_IDENTITAET = sql`coalesce(${uebergang.monitorId}, ${uebergang.selb
  * adapter comment the old ticket instead of opening a new one after the close, and the late
  * Entwarnung would then close the ticket the alarm just opened. The filter drops whole episodes,
  * so it can never promote a younger delivery of the same episode to head.
+ *
+ * `umfang` splits the ledger between its two executors — see `ZustellUmfang`.
  */
 export async function ladeOffeneZustellungen(
 	limit: number,
+	umfang: ZustellUmfang,
 	db: Ausfuehrer = getDb()
 ): Promise<OffeneZustellung[]> {
+	const gehoertZuUmfang =
+		umfang === 'selbst'
+			? sql`${uebergang.selbstMonitorId} is not null`
+			: sql`${uebergang.selbstMonitorId} is null`;
+
 	const koepfe = db
 		.select({
 			// Aliased one by one: `zustellung.id` and `uebergang.id` would collide into two columns
@@ -320,6 +393,7 @@ export async function ladeOffeneZustellungen(
 		.where(
 			and(
 				eq(zustellung.zustand, 'offen'),
+				gehoertZuUmfang,
 				notExists(
 					db
 						.select({ eins: sql`1` })
@@ -360,7 +434,9 @@ export async function ladeOffeneZustellungen(
 			ereignis: zustellung.ereignis,
 			kanal: zustellung.kanal,
 			webhookZielId: zustellung.webhookZielId,
-			jobId: zustellung.jobId
+			jobId: zustellung.jobId,
+			versuche: zustellung.versuche,
+			episodeOffen: sql<boolean>`${uebergang.beendetAm} is null`
 		})
 		.from(zustellung)
 		.innerJoin(uebergang, eq(uebergang.id, zustellung.uebergangId))
@@ -379,6 +455,8 @@ export async function ladeOffeneZustellungen(
 		kanal: zeile.kanal,
 		webhookZielId: zeile.webhookZielId,
 		jobId: zeile.jobId,
+		versuche: zeile.versuche,
+		episodeOffen: zeile.episodeOffen,
 		episode: alsSicht(zeile)
 	}));
 }
@@ -469,6 +547,10 @@ export async function vermerkeZustellung(
 			zustand,
 			letzterFehler: fehler,
 			zugestelltAm: zustand === 'zugestellt' ? jetzt : null,
+			// Only `markiereFehlgeschlagen` writes this, and nothing walks back out of the dead letter
+			// — but keeping the pair in step here means `zustellung_abschluss_zum_zustand` cannot be
+			// broken from this path either.
+			aufgegebenAm: zustand === 'fehlgeschlagen' ? jetzt : null,
 			versuche: sql`${zustellung.versuche} + 1`
 		})
 		.where(eq(zustellung.id, zustellungId));
@@ -485,15 +567,21 @@ export async function vermerkeZustellung(
  *
  * The resulting row is the hook the global self-monitor reads (SPEC §8, #30), and it is what
  * releases the target's blocked chain — see `ladeOffeneZustellungen`.
+ *
+ * `aufgegeben_am` is that hook's timestamp: „ist die Zustellung **jetzt** gestört?" is decided by
+ * comparing it against the target's last success, and `erstellt_am` would answer a different
+ * question — when the delivery was planned, not when it was given up on.
  */
 export async function markiereFehlgeschlagen(
 	zustellungId: string,
+	jetzt: Date = new Date(),
 	db: Ausfuehrer = getDb()
 ): Promise<void> {
 	await db
 		.update(zustellung)
 		.set({
 			zustand: 'fehlgeschlagen',
+			aufgegebenAm: jetzt,
 			letzterFehler: sql`coalesce(${zustellung.letzterFehler}, 'Zustellung nach erschöpften Versuchen aufgegeben')`
 		})
 		.where(eq(zustellung.id, zustellungId));

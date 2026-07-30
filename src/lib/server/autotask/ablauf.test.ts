@@ -504,7 +504,7 @@ describe.skipIf(!databaseUrl && !process.env.CI)('Autotask-Ticketführung', () =
 				})
 			).rejects.toThrow();
 
-			await markiereFehlgeschlagen(zustellung.id, db);
+			await markiereFehlgeschlagen(zustellung.id, new Date(), db);
 
 			const [zeile] = await zustellungen();
 			expect(zeile.zustand).toBe('fehlgeschlagen');

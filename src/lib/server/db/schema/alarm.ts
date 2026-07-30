@@ -288,7 +288,16 @@ export const zustellung = pgTable(
 		versuche: integer('versuche').notNull().default(0),
 		letzterFehler: text('letzter_fehler'),
 		erstelltAm: timestamp('erstellt_am', { withTimezone: true }).notNull().defaultNow(),
-		zugestelltAm: timestamp('zugestellt_am', { withTimezone: true })
+		zugestelltAm: timestamp('zugestellt_am', { withTimezone: true }),
+		/**
+		 * When this delivery was given up on — the dead letter's own timestamp (SPEC §8).
+		 *
+		 * `erstellt_am` says when the delivery was *planned*, which can be hours before the retries
+		 * were spent. The global self-monitor asks „is alarm delivery broken **now**?", and answers it
+		 * by comparing this against `zugestellt_am` **per target**; without a moment of failure that
+		 * comparison has nothing to stand on.
+		 */
+		aufgegebenAm: timestamp('aufgegeben_am', { withTimezone: true })
 	},
 	(t) => [
 		index('zustellung_uebergang_idx').on(t.uebergangId),
@@ -301,6 +310,12 @@ export const zustellung = pgTable(
 			'zustellung_ziel_je_kanal',
 			sql`(kanal = 'webhook' and webhook_ziel_id is not null)
 				or (kanal = 'autotask' and webhook_ziel_id is null)`
+		),
+		/** The two end states carry their timestamp, and only theirs. */
+		check(
+			'zustellung_abschluss_zum_zustand',
+			sql`(zustand = 'zugestellt') = (zugestellt_am is not null)
+				and (zustand = 'fehlgeschlagen') = (aufgegeben_am is not null)`
 		)
 	]
 );

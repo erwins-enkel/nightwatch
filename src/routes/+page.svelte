@@ -41,6 +41,12 @@
 		>
 			{m.settings_webhooks_link()}
 		</a>
+		<a
+			href={resolve('/einstellungen/selbstueberwachung')}
+			class="w-fit text-emerald-400 underline underline-offset-4"
+		>
+			{m.settings_self_link()}
+		</a>
 		<a href={resolve('/health')} class="w-fit text-emerald-400 underline underline-offset-4">
 			{m.health_link()}
 		</a>

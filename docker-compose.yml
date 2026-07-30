@@ -18,6 +18,10 @@ x-app-env: &app-env
   ZUORDNUNG_TICK_SECONDS: ${ZUORDNUNG_TICK_SECONDS:-10}
   ZEIT_TICK_SECONDS: ${ZEIT_TICK_SECONDS:-30}
   ALARM_TICK_SECONDS: ${ALARM_TICK_SECONDS:-10}
+  SELBST_TICK_SECONDS: ${SELBST_TICK_SECONDS:-30}
+  # The watchdog's encrypted config and dedup cache (SPEC §8). Only the watchdog mounts the volume;
+  # the variable is shared so every role agrees on the path.
+  WATCHDOG_CACHE_FILE: ${WATCHDOG_CACHE_FILE:-/var/lib/nightwatch/watchdog-cache.enc}
   # Shared, not web-only: the worker builds the Rückverweis deep link every alarm carries, so it
   # needs the same public origin the dashboard is served under.
   ORIGIN: ${ORIGIN:-http://localhost:3000}
@@ -108,7 +112,13 @@ services:
     depends_on:
       web:
         condition: service_healthy
+    volumes:
+      # The one piece of state that must survive Postgres being gone (SPEC §8): the encrypted
+      # config and dedup cache. Without it a database outage could not be alarmed about at all,
+      # and a restart would re-announce an outage it had already reported.
+      - watchdog-data:/var/lib/nightwatch
     healthcheck: *liveness
 
 volumes:
   postgres-data:
+  watchdog-data:
