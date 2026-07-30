@@ -276,7 +276,7 @@ export async function ladeAusnahmetage(
 	monitorIds: string[],
 	vonDatum: string,
 	bisDatum: string,
-	tx: Tx
+	tx: Ausfuehrer
 ): Promise<Map<string, string[]>> {
 	if (monitorIds.length === 0) return new Map();
 
