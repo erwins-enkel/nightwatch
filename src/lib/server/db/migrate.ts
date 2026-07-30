@@ -9,6 +9,7 @@
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { closePool, getDb, pingDatabase } from './client';
 import { createLogger, describeError } from '../logger';
+import { synchronisiereVorlagen } from '../regel/db';
 
 const MAX_WAIT_MS = 60_000;
 const RETRY_DELAY_MS = 1_000;
@@ -37,6 +38,11 @@ try {
 	await waitForDatabase();
 	await migrate(getDb(), { migrationsFolder: 'drizzle' });
 	log.info('migrations applied');
+
+	// Die kuratierten Regel-Vorlagen kommen mit dem Image und werden „mit Releases aktualisiert"
+	// (CONTEXT „Regel-Vorlage"). Hier, weil dieses Skript schon der eine Prozess ist, der beim Start
+	// gegen ein frisch migriertes Schema schreibt — ein zweiter Weg bräuchte einen zweiten Lock.
+	await synchronisiereVorlagen();
 } catch (err) {
 	log.error('migration failed', { error: describeError(err) });
 	await closePool().catch(() => {});
