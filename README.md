@@ -122,6 +122,28 @@ or **Unclear** (no pattern matched). The judging engine is a pluggable **Classif
 - **Unassigned** mail (matching no monitor) creates **no** customer ticket; it lands in a
   system **triage** view in the dashboard and feeds rule creation.
 
+### Creating rules
+
+Rules are created in a four-step wizard — **customer → kind → detection → parameters**. Where a
+rule comes from only changes how much of that wizard is prefilled: nothing (by hand), kind plus
+detection plus parameter defaults (a **rule template**), or detection plus a kind guess plus the
+recognised rhythm (**derived from an example mail**). Details in
+[`docs/regel-entstehung.md`](docs/regel-entstehung.md).
+
+- **No rule becomes active without a human confirming it.** A new monitor is a draft until it is
+  activated, and activation is also its epoch — it never judges anything from before it.
+- The derivation fills in **only the temporal and the structural**: match criteria, the recognised
+  **rhythm** turned into an expectation, a grace period from the observed spread, counter bounds
+  from the learning window. Which sentence in a report means "all good" is marked by a person in
+  the example text. Every proposal carries its evidence — *"every working day ~05:40, from 10
+  occurrences"*.
+- A **rhythm** is recognised from three occurrences at ≤ 25 % spread (floor 15 minutes), as one of
+  interval, daily, every working day or weekly. Monthly is deliberately absent: a ~30-day learning
+  window cannot evidence it.
+- **Rule templates** for known products ship inside the image and are updated with releases; you
+  can build your own from an existing monitor and export/import them. A template carries rule and
+  parameter fields and nothing else — never credentials.
+
 ### Customer matching
 
 A single mailbox typically carries notifications for many customers. Nightwatch attributes
@@ -462,11 +484,13 @@ truth for product and architecture decisions.
 │   ├── lib/server/                 # Shared server code (env, logger, db, heartbeat, watchdog)
 │   │   ├── graph/                  # Microsoft Graph: MSAL tokens, delta calls, error classes
 │   │   ├── ingestion/              # Delta poll loop, backoff, mailbox persistence
+│   │   ├── regel/                  # Rhythm detection, derivation, rule templates
 │   │   └── selbst/                 # Self-monitors, watchdog path, ingestion gate, ping
 │   ├── worker/                     # Worker entrypoint — Bun runs it straight from source
 │   └── watchdog/                   # Watchdog entrypoint
 └── docs/
     ├── datenmodell.md               # Entities, invariants and the decisions behind them
+    ├── regel-entstehung.md          # Rhythm detection, derivation, wizard, rule templates
     ├── self-monitoring.md           # Self-monitors, watchdog send path, ingestion gate, ping
     ├── webhook.md                   # Webhook payload, HMAC signature, delivery semantics
     └── research/
