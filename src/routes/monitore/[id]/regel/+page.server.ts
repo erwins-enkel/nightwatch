@@ -78,7 +78,7 @@ const FELDER = [
 	'musterGut'
 ] as const;
 
-export type Eingaben = Record<(typeof FELDER)[number], string> & { wochentage: string[] };
+type Eingaben = Record<(typeof FELDER)[number], string> & { wochentage: string[] };
 
 /**
  * Was eingetippt wurde, zurück ans Formular.
