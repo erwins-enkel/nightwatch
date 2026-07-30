@@ -72,7 +72,20 @@ function alarmAbfrage(db: Ausfuehrer) {
 			art: monitor.art,
 			kundeId: kunde.id,
 			kundeName: kunde.name,
-			alarmgrund: uebergang.alarmgrund,
+			/**
+			 * Der **lebende** Grund vom Monitor, nicht der eingefrorene der Episode.
+			 *
+			 * Die beiden Spalten sind mit Absicht verschieden: `uebergang.alarmgrund` ist der Grund
+			 * *zum Alarmzeitpunkt* und bleibt, was er war — mit ihm ging der Alarm raus, daran hängen
+			 * Korrelations-Key und Ticket-Text. `monitor.alarmgrund` ist der aktuelle, „so the
+			 * dashboard is live" (Schema-Kommentar). Ein Monitor, der von „überfällig" auf „Fehler
+			 * gemeldet" verschärft, stünde sonst weiter als „überfällig" auf dem Board — während die
+			 * empfohlene Aktion daneben schon dem neuen Grund folgt.
+			 *
+			 * `coalesce` nur als Gürtel zum Hosenträger: eine offene Episode heißt gestört, und
+			 * gestört heißt per CHECK, dass ein Grund dasteht.
+			 */
+			alarmgrund: sql<Alarmgrund>`coalesce(${monitor.alarmgrund}, ${uebergang.alarmgrund})`,
 			begonnenAm: uebergang.begonnenAm,
 			vorkommen: uebergang.vorkommen,
 			quittiertAm: uebergang.quittiertAm,

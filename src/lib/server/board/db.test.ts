@@ -182,6 +182,36 @@ describe.skipIf(!databaseUrl && !process.env.CI)('Board-Lesezugriffe', () => {
 			expect(await ladeAlarmLeiste(db)).toHaveLength(0);
 		});
 
+		/**
+		 * CONTEXT „Verschärfung": beim Grundwechsel wandert nur der *lebende* Grund am Monitor;
+		 * `uebergang.alarmgrund` bleibt der, mit dem der Alarm rausging. Das Board zeigt den
+		 * lebenden — sonst stünde ein auf „Fehler gemeldet" verschärfter Monitor weiter als
+		 * „überfällig" da, während die empfohlene Aktion daneben schon dem neuen Grund folgt.
+		 */
+		it('zeigt den lebenden Alarmgrund, nicht den eingefrorenen der Episode', async () => {
+			const id = await anlegen();
+			await stoere(id); // Episode und Monitor starten beide auf „überfällig".
+
+			await db
+				.update(schema.monitor)
+				.set({ alarmgrund: 'fehler_gemeldet' })
+				.where(eq(schema.monitor.id, id));
+			await db
+				.update(schema.uebergang)
+				.set({ verschaerftAm: JETZT })
+				.where(eq(schema.uebergang.monitorId, id));
+
+			const [zeile] = await ladeAlarmLeiste(db);
+			expect(zeile.alarmgrund).toBe('fehler_gemeldet');
+			expect(zeile.verschaerftAm).not.toBeNull();
+
+			// Und im Drawer dieselbe Auskunft — beide lesen dieselbe Abfrage.
+			const detail = await ladeMonitorDetail(id, JETZT, db);
+			expect(detail?.episode?.alarmgrund).toBe('fehler_gemeldet');
+			// Der Monitor selbst trägt ihn ebenfalls; daraus entsteht die empfohlene Aktion.
+			expect(detail?.alarmgrund).toBe('fehler_gemeldet');
+		});
+
 		it('reicht Quittierung und Verschärfung durch', async () => {
 			const id = await anlegen();
 			await stoere(id, { quittiertAm: JETZT, verschaerftAm: JETZT, vorkommen: 4 });
