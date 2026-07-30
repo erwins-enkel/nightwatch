@@ -39,8 +39,11 @@ const TRIAGE_AUF_DEM_BOARD = 5;
  * Eine Auswahl statt eines Zeitstempels, mit Absicht: ein `datetime-local` trägt keine Zone, und
  * der Server müsste raten, ob „14:00" die des Browsers oder seine eigene meint. Eine Dauer ist in
  * jeder Zone dieselbe — und „acht Stunden Wartung" ist ohnehin, was jemand meint.
+ *
+ * Nicht exportiert: ein `+page.server.ts` darf nur die von SvelteKit vorgesehenen Namen ausführen
+ * (`load`, `actions`, …), sonst bricht der Produktionsbau. Zur Seite kommt die Liste über `load`.
  */
-export const PAUSE_DAUERN = [3600, 4 * 3600, 8 * 3600, 24 * 3600, 7 * 24 * 3600];
+const PAUSE_DAUERN = [3600, 4 * 3600, 8 * 3600, 24 * 3600, 7 * 24 * 3600];
 
 function leseFilter(params: URLSearchParams): BoardFilter {
 	const zustand = params.get('zustand') ?? '';
