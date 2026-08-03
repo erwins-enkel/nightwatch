@@ -1,0 +1,19 @@
+# Package Managers
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+bun.lock
+bun.lockb
+
+# Miscellaneous
+/static/
+
+# Prose: SPEC.md, CONTEXT.md and the research docs are hand-wrapped documents. Letting Prettier
+# reflow them would bury every real change in formatting noise.
+*.md
+
+# Generated
+/drizzle/meta/
+
+# Shepherd session-local
+/.shepherd-plan-blocks.json

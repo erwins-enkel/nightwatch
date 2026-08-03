@@ -122,6 +122,28 @@ or **Unclear** (no pattern matched). The judging engine is a pluggable **Classif
 - **Unassigned** mail (matching no monitor) creates **no** customer ticket; it lands in a
   system **triage** view in the dashboard and feeds rule creation.
 
+### Creating rules
+
+Rules are created in a four-step wizard — **customer → kind → detection → parameters**. Where a
+rule comes from only changes how much of that wizard is prefilled: nothing (by hand), kind plus
+detection plus parameter defaults (a **rule template**), or detection plus a kind guess plus the
+recognised rhythm (**derived from an example mail**). Details in
+[`docs/regel-entstehung.md`](docs/regel-entstehung.md).
+
+- **No rule becomes active without a human confirming it.** A new monitor is a draft until it is
+  activated, and activation is also its epoch — it never judges anything from before it.
+- The derivation fills in **only the temporal and the structural**: match criteria, the recognised
+  **rhythm** turned into an expectation, a grace period from the observed spread, counter bounds
+  from the learning window. Which sentence in a report means "all good" is marked by a person in
+  the example text. Every proposal carries its evidence — *"every working day ~05:40, from 10
+  occurrences"*.
+- A **rhythm** is recognised from three occurrences at ≤ 25 % spread (floor 15 minutes), as one of
+  interval, daily, every working day or weekly. Monthly is deliberately absent: a ~30-day learning
+  window cannot evidence it.
+- **Rule templates** for known products ship inside the image and are updated with releases; you
+  can build your own from an existing monitor and export/import them. A template carries rule and
+  parameter fields and nothing else — never credentials.
+
 ### Customer matching
 
 A single mailbox typically carries notifications for many customers. Nightwatch attributes
@@ -151,7 +173,18 @@ which must alarm on its own:
    source.
 
 The "Nightwatch itself is degraded" signal is delivered over a channel **independent of the
-mail pipeline** (since the mail pipeline may be exactly what is broken). See
+mail pipeline** (since the mail pipeline may be exactly what is broken).
+
+Concretely, Nightwatch runs built-in system monitors — one per mailbox plus a global
+"Nightwatch-Kern" — with the same state machine and alarm lifecycle as any customer monitor. The
+`watchdog` service evaluates them and sends their alarms on its own path, without the worker or the
+job queue, backed by a local encrypted cache so that a **database outage** can still be reported.
+While a mailbox's ingestion is provably broken, overdue decisions for its monitors are *suspended
+rather than taken*, so a Graph outage produces one self-alarm instead of a ticket per customer. And
+an opt-in outgoing **heartbeat ping** covers the one failure no process of a dead instance could
+report itself: the total outage.
+
+See [`docs/self-monitoring.md`](docs/self-monitoring.md), plus
 [issue #11](https://github.com/erwins-enkel/nightwatch/issues/11) and
 [issue #12](https://github.com/erwins-enkel/nightwatch/issues/12).
 
@@ -171,6 +204,38 @@ When a monitor changes state, Nightwatch can alert through:
 
 Email alerts are intentionally **not** part of v1.
 
+### Connecting Autotask
+
+Two steps, one in Autotask and one in Nightwatch.
+
+**In Autotask**, create a dedicated user with the security level **API User (API-only)** and a
+**Custom (Internal Integration)** tracking identifier. API-only users cost no seat and have no UI
+access; a copy of the system security level restricted to reading and writing tickets and reading
+companies is enough.
+
+**In Nightwatch**, open *Settings → Autotask*:
+
+1. Save the API user name, its secret and the integration code. All three are stored AES-256-GCM
+   encrypted, so `NIGHTWATCH_SECRET_KEY` has to be set (see [Connecting a
+   mailbox](#connecting-a-mailbox)).
+2. **Resolve the zone.** Autotask's API base URL differs per database; it is looked up once and
+   stored, never per call.
+3. **Pick the ticket defaults.** Status, priority, queue, work type and the note fields are
+   numeric IDs *of your database* — Nightwatch reads them from your picklists and stores what you
+   choose. Nothing is hardcoded, so no value is assumed to mean the same thing in your tenant as in
+   anyone else's. Status and priority are mandatory; without them no ticket is ever attempted.
+4. **Link your customers.** On each customer page, search the Autotask directory and pick the
+   company. Only its stable ID is stored — there is no continuous sync and no bulk import, and a
+   customer without a link keeps alerting through the dashboard and webhooks.
+
+What then happens on an alarm: Nightwatch opens **one ticket per monitor**, carrying a correlation
+key in `externalID`. Before creating anything it queries for that key, which is what makes a retry
+after a crash idempotent. Escalations and all-clears are added as notes; the ticket is only closed
+automatically when the recovery was evidence-based **and** the ticket is untouched — still in its
+creation status, with nobody assigned. Deliveries run through a durable queue with exponential
+backoff, serialized as Autotask asks; once the attempts are spent, the delivery is marked failed and
+the alert delivery itself counts as disturbed.
+
 ## Email ingestion (v1): Microsoft 365 / Microsoft Graph
 
 v1 ingests mail from **Microsoft 365 only**, via **Graph delta-query polling** (pull) rather
@@ -188,6 +253,49 @@ and are ruled out for the on-prem case.
 
 Full rationale, PowerShell onboarding snippets, and error-handling details are in
 [`docs/research/m365-graph-ingestion.md`](docs/research/m365-graph-ingestion.md).
+
+### Connecting a mailbox
+
+Set `NIGHTWATCH_SECRET_KEY` in your `.env` first — it encrypts every credential Nightwatch
+stores (AES-256-GCM). The stack boots without it, but connecting a mailbox will fail:
+
+```sh
+openssl rand -base64 32
+```
+
+Then open **Settings → Mailboxes** (`/einstellungen/postfaecher`) and enter the customer's
+tenant ID, your app registration's client ID and secret, and the mailbox address. The page then
+shows the two things you hand to the customer's administrator:
+
+1. an **admin consent link** for that tenant, and
+2. a **PowerShell snippet** that scopes `Mail.Read` down to this one mailbox via RBAC for
+   Applications in Exchange Online.
+
+Register the redirect URI the page displays (`<your origin>/einstellungen/postfaecher/consent`)
+in your app registration first — Microsoft Entra ID matches it character for character.
+
+> **Do the scoping step.** Application `Mail.Read` is tenant-wide by default, so consent alone
+> lets Nightwatch read *every* mailbox in the customer tenant. Note also that RBAC grants are
+> **additive** to Entra grants: if the same app additionally holds an organisation-wide
+> `Mail.Read` in Entra ID, that silently defeats the scope. Permission changes take 30 minutes
+> to 2 hours to propagate.
+
+### Learning window
+
+Connecting a mailbox pulls a one-off backfill of past mail — 30 days by default, configurable
+per mailbox. It feeds mail search, Takt recognition and rule derivation, and is marked as such
+in the database: **history is learning material, never monitoring material.** Monitors only
+ever evaluate forward from their own activation, so a freshly connected mailbox never produces
+a burst of tickets for gaps that predate it.
+
+### Ingestion status
+
+Every mailbox records its last successful poll, its last error code, and how close its
+credential is to expiring — visible on the same settings page. Throttling (`429`/`503`) is
+honoured via `Retry-After`, an expired delta token (`410 Gone`) triggers an automatic resync,
+and repeated failures back off exponentially up to 15 minutes. Turning that status into an
+alarm is the job of the mailbox **self-monitor**, which arrives with the self-monitoring
+milestone.
 
 ---
 
@@ -235,12 +343,73 @@ processes give better observability and self-healing.
 - A socket-based active force-restart (for the rare total hang) is opt-in behind a
   socket-proxy and is **not** in v1.
 
+> **Compose healthchecks do not restart anything.** Docker only restarts a container that
+> *exits*; an `unhealthy` one is left alone (that is a Swarm feature). The healthchecks in
+> `docker-compose.yml` exist to order startup via `depends_on` and to make `docker compose ps`
+> tell the truth. Self-healing comes from the in-process watchdog exiting plus
+> `restart: unless-stopped` — nothing else.
+
+---
+
+## Running it
+
+The stack runs from the repository root. Everything below works today; what it *does* so far
+is come up, report its own health and serve a placeholder page — the monitoring itself is
+being built out issue by issue (see the roadmap).
+
+### With Docker Compose
+
+```bash
+cp .env.example .env       # then edit POSTGRES_PASSWORD at least
+docker compose up -d --build
+curl localhost:3000/health
+```
+
+`web`, `worker` and `watchdog` all run from the **same image**, distinguished only by their
+command — one tag to pull, one image to harden. Startup is ordered `postgres` (healthy) →
+`web` → `worker` + `watchdog`: `web` applies the database migrations before it starts
+serving, so it is the only migrator and no locking is needed.
+
+`GET /health` is passive — it reports, it never acts, and it is safe to poll as often as you
+like. It answers `200`/`ok` when the web service can reach the database, and `503`/`degraded`
+when it cannot. The heartbeat freshness of the other services is reported in the body but
+deliberately does not affect the status code: `worker` and `watchdog` wait for `web` to be
+healthy, so folding their heartbeats into it would deadlock a cold start.
+
+### For development
+
+```bash
+bun install
+docker compose up -d postgres
+
+# Point host-side processes at the published Postgres port. Put this in .env.local, not .env:
+# Bun reads .env.local and Compose does not, so the containers keep using the `postgres` host.
+echo 'DATABASE_URL=postgres://nightwatch:change-me@localhost:5432/nightwatch' > .env.local
+
+bun run db:migrate
+bun run dev            # dashboard on http://localhost:5175
+bun run dev:worker     # in a second terminal
+bun run dev:watchdog   # in a third
+```
+
+| Command | What it does |
+| --- | --- |
+| `bun run lint` | Prettier check plus ESLint |
+| `bun run check` | Compiles the Paraglide messages, then `svelte-check` |
+| `bun run test` | Vitest unit tests |
+| `bun run db:generate` | Generates a migration from the Drizzle schema |
+
+**One rule for shared server code:** anything under `src/lib/server/` is imported both by
+SvelteKit *and* by the worker/watchdog entrypoints, which Bun runs on their own. It must
+therefore read `process.env` and never import `$env/*` or `$app/*` — those only exist inside a
+SvelteKit build.
+
 ---
 
 ## Planned deployment
 
-> The commands and channels below describe the **intended** deployment once v1 is built.
-> They do not work yet — there is no published image or Compose file in this repository.
+> The Compose file and `.env.example` below exist and work. The published image, the Portainer
+> template and the DO Marketplace channel do not exist yet.
 
 Distribution is staged (details in
 [`docs/research/distribution-updates.md`](docs/research/distribution-updates.md)):
@@ -301,16 +470,37 @@ truth for product and architecture decisions.
 ```
 .
 ├── CLAUDE.md                       # Project concept and working notes
+├── SPEC.md                         # Build-ready specification for v1
+├── CONTEXT.md                      # Binding domain glossary
 ├── README.md                       # This file
+├── docker-compose.yml              # The four services — single source of truth for deployment
+├── .env.example                    # Copy to .env
+├── Dockerfile                      # One image, three roles
+├── docker/entrypoint.sh            # Role dispatch: web | worker | watchdog | migrate
+├── drizzle/                        # Generated SQL migrations
+├── messages/                       # Paraglide message catalogues (en, de)
+├── src/
+│   ├── routes/                     # SvelteKit dashboard, mailbox settings, /health
+│   ├── lib/server/                 # Shared server code (env, logger, db, heartbeat, watchdog)
+│   │   ├── graph/                  # Microsoft Graph: MSAL tokens, delta calls, error classes
+│   │   ├── ingestion/              # Delta poll loop, backoff, mailbox persistence
+│   │   ├── regel/                  # Rhythm detection, derivation, rule templates
+│   │   └── selbst/                 # Self-monitors, watchdog path, ingestion gate, ping
+│   ├── worker/                     # Worker entrypoint — Bun runs it straight from source
+│   └── watchdog/                   # Watchdog entrypoint
 └── docs/
+    ├── datenmodell.md               # Entities, invariants and the decisions behind them
+    ├── regel-entstehung.md          # Rhythm detection, derivation, wizard, rule templates
+    ├── self-monitoring.md           # Self-monitors, watchdog send path, ingestion gate, ping
+    ├── webhook.md                   # Webhook payload, HMAC signature, delivery semantics
     └── research/
         ├── m365-graph-ingestion.md # Ingestion: Graph delta-query, app model, scoping, self-monitoring
         ├── autotask-api.md         # Autotask PSA ticket creation, de-dup, retry queue
         └── distribution-updates.md # Compose → Portainer → DO Marketplace, update mechanic
 ```
 
-The GitHub issues are the living design record; a consolidated `SPEC.md` will follow from
-[#10](https://github.com/erwins-enkel/nightwatch/issues/10).
+The GitHub issues are the living design record; [`SPEC.md`](SPEC.md) consolidates the
+decisions and [`CONTEXT.md`](CONTEXT.md) is the binding glossary.
 
 ## Scope
 

@@ -1,0 +1,164 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, 'epic/**']
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Lint, typecheck, tests
+    runs-on: ubuntu-latest
+
+    # The data model's invariants (CHECK constraints, partial unique indexes) can only be tested
+    # by a database that enforces them, so the test job gets a throwaway one.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: nightwatch
+          POSTGRES_PASSWORD: nightwatch
+          POSTGRES_DB: nightwatch
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nightwatch -d nightwatch"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      DATABASE_URL: postgres://nightwatch:nightwatch@127.0.0.1:5432/nightwatch
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.10'
+
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - run: bun run check
+
+      # Catches the classic slip: schema edited, migration forgotten. Diffs against the committed
+      # snapshots, so it needs no database. `git status` rather than `git diff` because a
+      # forgotten migration shows up as an *untracked* file, which `git diff` would not see.
+      - name: Migrations are in sync with the schema
+        run: |
+          bun run db:check
+          bun run db:generate
+          if [ -n "$(git status --porcelain drizzle/)" ]; then
+            echo "drizzle/ changed — run 'bun run db:generate' and commit the result:"
+            git status --porcelain drizzle/
+            exit 1
+          fi
+
+      - run: bun run test
+
+  image:
+    name: Image build and Compose smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+
+      # Compose is the single source of truth for the deployment, so CI builds the image exactly
+      # the way an operator does. Multi-arch release images are the release workflow's job.
+      - name: Build image
+        run: |
+          cp .env.example .env
+          docker compose build
+
+      # The issue's actual goal: all four services come up. `--wait` blocks until every
+      # healthcheck passes, so this step failing *is* the smoke test failing.
+      - name: Start the stack and wait for every service to be healthy
+        run: docker compose up -d --wait --wait-timeout 240
+
+      - name: All four services are running
+        run: |
+          for service in postgres web worker watchdog; do
+            state=$(docker compose ps --format '{{.Service}} {{.State}}' | awk -v s="$service" '$1 == s {print $2}')
+            echo "$service: ${state:-missing}"
+            if [ "$state" != running ]; then
+              echo "expected $service to be running"
+              exit 1
+            fi
+          done
+
+      - name: /health reports ok with every service fresh
+        run: |
+          for _ in $(seq 1 15); do
+            body=$(curl -fsS http://127.0.0.1:3000/health || true)
+            if [ -n "$body" ] && echo "$body" | jq -e '.status == "ok" and ([.services[] | select(.stale == false)] | length == 3)' > /dev/null; then
+              echo "$body"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "last response: ${body:-<none>}"
+          exit 1
+
+      - name: pg-boss initialised its schema
+        run: |
+          count=$(docker compose exec -T postgres \
+            psql -U nightwatch -d nightwatch -tAc 'select count(*) from pgboss.version')
+          echo "pgboss.version rows: $count"
+          [ "$count" -ge 1 ]
+
+      # Migrate-on-startup is what an operator actually experiences, so the smoke test asserts the
+      # whole data model landed — not just that migrations ran at all.
+      - name: Migrations created every core table
+        run: |
+          for table in postfach kunde zuordnungs_merkmal monitor regel regel_vorlage mail \
+            mail_sorte uebergang ticket_korrelation webhook_ziel zustellung ausnahmekalender \
+            ausnahmetag monitor_ausnahmekalender selbst_monitor einstellungen heartbeat; do
+            result=$(docker compose exec -T postgres \
+              psql -U nightwatch -d nightwatch -tAc "select to_regclass('public.$table')")
+            echo "$table: ${result:-missing}"
+            if [ "$result" != "$table" ]; then
+              echo "expected table $table to exist"
+              exit 1
+            fi
+          done
+
+      - name: Seeds are in place
+        run: |
+          kern=$(docker compose exec -T postgres psql -U nightwatch -d nightwatch -tAc \
+            "select bezeichnung from selbst_monitor where schluessel = 'kern'")
+          echo "global self-monitor: ${kern:-missing}"
+          [ "$kern" = "Nightwatch-Kern" ]
+
+          retention=$(docker compose exec -T postgres psql -U nightwatch -d nightwatch -tAc \
+            "select retention_tage from einstellungen where id = 1")
+          echo "retention days: ${retention:-missing}"
+          [ "$retention" = "90" ]
+
+      # SPEC §12: non-root containers, and no Docker socket anywhere in the stack.
+      - name: Containers are hardened
+        run: |
+          for service in web worker watchdog; do
+            user=$(docker inspect --format '{{.Config.User}}' "$(docker compose ps -q "$service")")
+            echo "$service runs as: ${user:-root}"
+            if [ "$user" != bun ]; then
+              echo "expected $service to run as a non-root user"
+              exit 1
+            fi
+          done
+          if grep -q 'docker\.sock' docker-compose.yml; then
+            echo "docker-compose.yml must not mount the Docker socket"
+            exit 1
+          fi
+
+      - name: Dump logs on failure
+        if: failure()
+        run: |
+          docker compose ps
+          docker compose logs --no-color
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
