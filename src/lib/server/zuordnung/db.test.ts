@@ -357,6 +357,56 @@ describe.skipIf(!databaseUrl && !process.env.CI)('Zuordnung', () => {
 			expect(sorten[0].kundeName).toBe('Kunde A');
 			expect(sorten[0].anzahl).toBe(1);
 		});
+
+		/**
+		 * Der Takt steht auf der Sorte, sobald der Stapel durch ist — nicht erst, wenn jemand die
+		 * Ansicht öffnet, und nicht in einem eigenen Hintergrundlauf (CONTEXT „Unüberwachte
+		 * Mail-Sorte"). Die Erkennung selbst hat ihre Tests in `regel/takt.test.ts`; hier zählt nur,
+		 * dass sie auf der richtigen Zeile landet.
+		 */
+		it('schreibt den erkannten Takt auf die Sorte', async () => {
+			await kundeMitMerkmal('Kunde A', 'absender', 'veeam.test');
+			for (let tag = 1; tag <= 6; tag++) {
+				await mailAnlegen({
+					betreff: `Backup Report ${tag}`,
+					ankunftszeit: new Date(`2026-07-0${tag}T03:40:00Z`)
+				});
+			}
+
+			await stapel();
+
+			const [sorte] = await db.select().from(schema.mailSorte);
+			expect(sorte.taktKlasse).toBe('taeglich');
+			expect(sorte.taktVorkommen).toBe(6);
+			// 03:40 UTC ist 05:40 in der Instanz-Zeitzone Europe/Berlin.
+			expect(sorte.taktUhrzeit).toBe('05:40');
+		});
+
+		it('nimmt den Takt wieder weg, wenn die Sorte unregelmäßig wird', async () => {
+			await kundeMitMerkmal('Kunde A', 'absender', 'veeam.test');
+			for (let tag = 1; tag <= 6; tag++) {
+				await mailAnlegen({
+					betreff: `Backup Report ${tag}`,
+					ankunftszeit: new Date(`2026-07-0${tag}T03:40:00Z`)
+				});
+			}
+			await stapel();
+
+			// Zwei Ausreißer mitten am Tag zerreißen den Tagesrhythmus.
+			await mailAnlegen({
+				betreff: 'Backup Report 7',
+				ankunftszeit: new Date('2026-07-07T11:00:00Z')
+			});
+			await mailAnlegen({
+				betreff: 'Backup Report 8',
+				ankunftszeit: new Date('2026-07-07T19:00:00Z')
+			});
+			await stapel();
+
+			const [sorte] = await db.select().from(schema.mailSorte);
+			expect(sorte.taktKlasse).toBeNull();
+			expect(sorte.taktVorkommen).toBeNull();
+		});
 	});
 
 	// -----------------------------------------------------------------------------------------

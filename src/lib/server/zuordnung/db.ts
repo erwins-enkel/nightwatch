@@ -8,6 +8,7 @@ import type {
 	TriageGrund,
 	ZuordnungsStufe
 } from '../db/schema/enums';
+import { TAKT_MAX_VORKOMMEN, erkenneTakt } from '../regel/takt';
 import { baueMerkmalIndex, bestimmeKunde, type MerkmalIndex, type MerkmalZeile } from './engine';
 import { normalisiereWert } from './merkmal';
 
@@ -138,6 +139,69 @@ export async function upsertSorten(gruppen: SortenGruppe[], tx: Tx): Promise<Map
 /** The key both the aggregation and the returned map are indexed by. */
 export function sortenSchluessel(kundeId: string, signatur: string): string {
 	return `${kundeId}\n${signatur}`;
+}
+
+/**
+ * Recomputes the Takt of the given Sorten from their mails (CONTEXT „Takt", #32).
+ *
+ * Lives here, beside `upsertSorten`, because this is where `mail_sorte` is written; the recognition
+ * itself is a pure function in `regel/takt.ts` and knows nothing about a database.
+ *
+ * **Why in the assignment batch and not in a loop of its own.** The Takt has to sit on the row
+ * before anyone reads it — the unmonitored-Sorten view is one the operator *opens*, and it must not
+ * have to wait for a scan (CONTEXT: „kein Hintergrund-Scan, der ihm Kandidaten aufdrängt"). It also
+ * has to survive retention (#34), which deletes the mails underneath while the statistics stay.
+ * Recomputing exactly the Sorten a batch touched gives both without a second scheduler: in steady
+ * state that is a handful of rows, and during a backfill the repeated work is bounded by the cap of
+ * `TAKT_MAX_VORKOMMEN` rows per Sorte and read straight off `mail_sorte_ankunftszeit_idx`.
+ */
+export async function aktualisiereSortenTakt(
+	sorteIds: string[],
+	zone: string,
+	tx: Tx
+): Promise<void> {
+	if (sorteIds.length === 0) return;
+
+	const eindeutig = [...new Set(sorteIds)];
+	const zeilen = await tx.execute<{ sorte_id: string; ankunftszeit: Date }>(sql`
+		select sorte_id, ankunftszeit from (
+			select
+				${mail.sorteId} as sorte_id,
+				${mail.ankunftszeit} as ankunftszeit,
+				row_number() over (
+					partition by ${mail.sorteId} order by ${mail.ankunftszeit} desc
+				) as rang
+			from ${mail}
+			where ${inArray(mail.sorteId, eindeutig)}
+		) juengste
+		where rang <= ${TAKT_MAX_VORKOMMEN}
+	`);
+
+	const jeSorte = new Map<string, Date[]>();
+	for (const zeile of zeilen.rows) {
+		const vorhanden = jeSorte.get(zeile.sorte_id);
+		if (vorhanden) vorhanden.push(new Date(zeile.ankunftszeit));
+		else jeSorte.set(zeile.sorte_id, [new Date(zeile.ankunftszeit)]);
+	}
+
+	for (const sorteId of eindeutig) {
+		const takt = erkenneTakt(jeSorte.get(sorteId) ?? [], zone);
+
+		// Also written when nothing was recognised: a Sorte that used to be regular and has become
+		// erratic must lose its Takt, or the wizard would keep prefilling an expectation the mails
+		// no longer support.
+		await tx
+			.update(mailSorte)
+			.set({
+				taktKlasse: takt?.klasse ?? null,
+				taktIntervallSekunden: takt?.intervallSekunden ?? null,
+				taktUhrzeit: takt?.uhrzeit ?? null,
+				taktWochentag: takt?.wochentag ?? null,
+				taktVorkommen: takt?.vorkommen ?? null,
+				taktStreuungSekunden: takt?.streuungSekunden ?? null
+			})
+			.where(eq(mailSorte.id, sorteId));
+	}
 }
 
 /** What the pipeline decided about one mail. */
@@ -605,7 +669,11 @@ export async function zaehleTriage(db: Ausfuehrer = getDb()): Promise<number> {
  *
  * Learning-window mails *do* count here, unlike in the triage list: this is the onboarding entry
  * point, and the history is exactly the material it is built from — including the Takt evidence
- * #32 later derives from the counters.
+ * derived from the counters.
+ *
+ * The Takt columns come along because they are what makes a Sorte „wiederkehrend": CONTEXT ties the
+ * listing criterion and the Takt prefill to the same threshold, so the view (#33) filters on
+ * `taktKlasse` rather than inventing a second rule.
  */
 export function listeSorten(grenze = 200, db: Ausfuehrer = getDb()) {
 	return db
@@ -618,7 +686,12 @@ export function listeSorten(grenze = 200, db: Ausfuehrer = getDb()) {
 			anzahl: mailSorte.anzahl,
 			ersterEingang: mailSorte.ersterEingang,
 			letzterEingang: mailSorte.letzterEingang,
-			ignoriert: mailSorte.ignoriert
+			ignoriert: mailSorte.ignoriert,
+			taktKlasse: mailSorte.taktKlasse,
+			taktIntervallSekunden: mailSorte.taktIntervallSekunden,
+			taktUhrzeit: mailSorte.taktUhrzeit,
+			taktWochentag: mailSorte.taktWochentag,
+			taktVorkommen: mailSorte.taktVorkommen
 		})
 		.from(mailSorte)
 		.innerJoin(kunde, eq(kunde.id, mailSorte.kundeId))

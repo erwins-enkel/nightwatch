@@ -49,6 +49,16 @@ export const mailSorte = pgTable(
 		taktWochentag: integer('takt_wochentag'),
 		/** The evidence a Takt proposal must carry: "werktäglich ~05:40, aus 12 Vorkommen". */
 		taktVorkommen: integer('takt_vorkommen'),
+		/**
+		 * The largest observed deviation from the rhythm, in seconds — what the derivation turns
+		 * into a Karenz proposal (#32).
+		 *
+		 * Stored rather than recomputed so this row stays the single source of the Takt: the
+		 * unmonitored-Sorten view and the wizard would otherwise be free to disagree about the same
+		 * rhythm, and „werktäglich ~05:40" in one place with a different grace period in the other
+		 * is exactly the kind of quiet inconsistency nobody debugs.
+		 */
+		taktStreuungSekunden: integer('takt_streuung_sekunden'),
 
 		ignoriert: boolean('ignoriert').notNull().default(false),
 		ignoriertAm: timestamp('ignoriert_am', { withTimezone: true })
@@ -132,10 +142,11 @@ export const mail = pgTable(
 		 * the referencing side by itself, and `mail` is by far the largest table — without them
 		 * SPEC §11's "Löschen auf Zuruf" sequential-scans it once per deleted customer, and once
 		 * more per assignment trait and per Sorte that goes with them. `kunde_id` doubles as the
-		 * per-customer mail listing in the UI, hence the composite.
+		 * per-customer mail listing in the UI, and `sorte_id` as the Takt recomputation's read
+		 * ("the newest N arrivals of this Sorte", #32) — hence the composites.
 		 */
 		index('mail_kunde_ankunftszeit_idx').on(t.kundeId, t.ankunftszeit),
-		index('mail_sorte_idx').on(t.sorteId),
+		index('mail_sorte_ankunftszeit_idx').on(t.sorteId, t.ankunftszeit),
 		index('mail_zuordnungs_merkmal_idx').on(t.zuordnungsMerkmalId),
 		/** The triage list is a small slice of a large table. */
 		index('mail_triage_grund_idx')

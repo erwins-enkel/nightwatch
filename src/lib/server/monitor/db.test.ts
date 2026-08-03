@@ -51,6 +51,12 @@ describe.skipIf(!databaseUrl && !process.env.CI)('Monitor-CRUD', () => {
 	beforeEach(async () => {
 		await db.delete(schema.postfach);
 		await db.delete(schema.kunde);
+		// Die Vorlage, die der Herkunfts-Test anlegt, hängt an keinem Kunden und überlebt die beiden
+		// Zeilen darüber. Sie trägt einen eindeutigen Schlüssel, also scheitert der zweite Lauf gegen
+		// dieselbe Datenbank an ihr — je nachdem, ob eine andere Suite die Tabelle zwischendurch
+		// geleert hat. Hier wegzuräumen ist billiger, als die Reihenfolge zu einer Zusicherung zu
+		// machen.
+		await db.delete(schema.regelVorlage);
 
 		const [zeile] = await db
 			.insert(schema.postfach)
@@ -103,6 +109,22 @@ describe.skipIf(!databaseUrl && !process.env.CI)('Monitor-CRUD', () => {
 		const [zeile] = await db.select().from(schema.monitor).where(eq(schema.monitor.id, id));
 		return zeile;
 	};
+
+	/**
+	 * Die Episoden **dieses** Monitors.
+	 *
+	 * Nicht `select().from(uebergang)` ohne Filter: das Aufräumen oben löscht Kunde und Postfach,
+	 * und daran hängen über Kaskaden nur die Episoden von *Kunden*-Monitoren. Die eines
+	 * Selbst-Monitors (`selbst_monitor_id`) überleben es — sie gehören keinem Kunden. Eine
+	 * ungefilterte Abfrage misst damit, was andere Suiten hinterlassen haben, und ob das auffällt,
+	 * hängt allein an der Reihenfolge, in der Vitest die Dateien abarbeitet.
+	 */
+	const holeEpisoden = (monitorId: string) =>
+		db
+			.select()
+			.from(schema.uebergang)
+			.where(eq(schema.uebergang.monitorId, monitorId))
+			.orderBy(schema.uebergang.begonnenAm);
 
 	const holeVorlageId = async (monitorId: string) => {
 		const [zeile] = await db
@@ -230,7 +252,7 @@ describe.skipIf(!databaseUrl && !process.env.CI)('Monitor-CRUD', () => {
 			expect(zeile.alarmgrund).toBeNull();
 			expect(zeile.paarOffenSeit).toBeNull();
 
-			const [episode] = await db.select().from(schema.uebergang);
+			const [episode] = await holeEpisoden(id);
 			expect(episode.erholungsArt).toBe('archiviert');
 			expect(episode.entwarntAm).toBeNull();
 		});
@@ -259,7 +281,7 @@ describe.skipIf(!databaseUrl && !process.env.CI)('Monitor-CRUD', () => {
 			const aus = await holeZeile(id);
 			expect(aus.aktiviertAm).toBeNull();
 			expect(aus.zustand).toBe('gesund');
-			expect((await db.select().from(schema.uebergang))[0].erholungsArt).toBe('archiviert');
+			expect((await holeEpisoden(id))[0].erholungsArt).toBe('archiviert');
 
 			const spaeter = new Date(+JETZT + 86_400_000);
 			await setzeAktivierung(id, true, spaeter, db);
@@ -295,7 +317,7 @@ describe.skipIf(!databaseUrl && !process.env.CI)('Monitor-CRUD', () => {
 
 			expect(await loescheMonitor(id, db)).toBe('historie');
 			expect(await holeZeile(id)).toBeDefined();
-			expect(await db.select().from(schema.uebergang)).toHaveLength(1);
+			expect(await holeEpisoden(id)).toHaveLength(1);
 		});
 
 		it('verweigert das Löschen, sobald eine Mail zugeordnet ist', async () => {

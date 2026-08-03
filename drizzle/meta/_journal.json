@@ -64,6 +64,13 @@
       "when": 1785341284282,
       "tag": "0008_selbstueberwachung",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1785412854212,
+      "tag": "0009_takt_statistik",
+      "breakpoints": true
     }
   ]
 }

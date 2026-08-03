@@ -117,6 +117,12 @@
 		</h1>
 		<p class="text-sm text-slate-400">{m.board_title()} · {zeitpunkt(data.jetzt)}</p>
 		<nav class="ml-auto flex flex-wrap items-center gap-4 text-sm">
+			<a
+				class="rounded border border-emerald-700 px-3 py-1 text-emerald-300 hover:border-emerald-500"
+				href={resolve('/monitore/neu')}
+			>
+				{m.board_new_monitor()}
+			</a>
 			<a class="text-slate-300 hover:text-emerald-300" href={resolve('/kunden')}>
 				{m.customers_link()}
 			</a>
@@ -128,6 +134,9 @@
 			</a>
 			<a class="text-slate-300 hover:text-emerald-300" href={resolve('/einstellungen/webhooks')}>
 				{m.settings_webhooks_link()}
+			</a>
+			<a class="text-slate-300 hover:text-emerald-300" href={resolve('/einstellungen/vorlagen')}>
+				{m.settings_templates_link()}
 			</a>
 			<a
 				class="text-slate-300 hover:text-emerald-300"
