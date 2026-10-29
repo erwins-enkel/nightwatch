@@ -1,0 +1,19 @@
+node_modules
+.git
+.github
+.svelte-kit
+build
+dist
+
+# Never bake secrets into the image (SPEC §12)
+.env
+.env.*
+!.env.example
+
+# Docs and session-local files add nothing to the image
+*.md
+!README.md
+docs
+.shepherd-plan-blocks.json
+.shepherd-preview
+.vscode

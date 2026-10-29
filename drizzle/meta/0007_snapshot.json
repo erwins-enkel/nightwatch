@@ -1,0 +1,2637 @@
+{
+  "id": "805b208e-2e57-4899-bb70-e4f278721740",
+  "prevId": "5b04e342-efeb-45b7-b005-60e57a1a8b17",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.postfach": {
+      "name": "postfach",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "bezeichnung": {
+          "name": "bezeichnung",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "adresse": {
+          "name": "adresse",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "client_id": {
+          "name": "client_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "client_secret_chiffre": {
+          "name": "client_secret_chiffre",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "secret_ablauf_am": {
+          "name": "secret_ablauf_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "delta_token": {
+          "name": "delta_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "delta_folge_link": {
+          "name": "delta_folge_link",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "letzter_erfolgreicher_poll": {
+          "name": "letzter_erfolgreicher_poll",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "runde_begonnen_am": {
+          "name": "runde_begonnen_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ingestion_stand_am": {
+          "name": "ingestion_stand_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "letzter_fehler_code": {
+          "name": "letzter_fehler_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "letzter_fehler_text": {
+          "name": "letzter_fehler_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "letzter_fehler_am": {
+          "name": "letzter_fehler_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "poll_intervall_sekunden": {
+          "name": "poll_intervall_sekunden",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 120
+        },
+        "naechster_poll_fruehestens_am": {
+          "name": "naechster_poll_fruehestens_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fehler_in_folge": {
+          "name": "fehler_in_folge",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "lernfenster_tage": {
+          "name": "lernfenster_tage",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 30
+        },
+        "lernfenster_abgeschlossen_am": {
+          "name": "lernfenster_abgeschlossen_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "aktiv": {
+          "name": "aktiv",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "erstellt_am": {
+          "name": "erstellt_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "postfach_adresse_unique": {
+          "name": "postfach_adresse_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "adresse"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.kunde": {
+      "name": "kunde",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kundennummer": {
+          "name": "kundennummer",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notiz": {
+          "name": "notiz",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "zustand": {
+          "name": "zustand",
+          "type": "kunde_zustand",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'aktiv'"
+        },
+        "archiviert_am": {
+          "name": "archiviert_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "autotask_company_id": {
+          "name": "autotask_company_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "erstellt_am": {
+          "name": "erstellt_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "kunde_archiviert_am_zum_zustand": {
+          "name": "kunde_archiviert_am_zum_zustand",
+          "value": "(zustand = 'archiviert') = (archiviert_am is not null)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.zuordnungs_merkmal": {
+      "name": "zuordnungs_merkmal",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "kunde_id": {
+          "name": "kunde_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "stufe": {
+          "name": "stufe",
+          "type": "zuordnungs_stufe",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "wert": {
+          "name": "wert",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "erstellt_am": {
+          "name": "erstellt_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "zuordnungs_merkmal_stufe_wert_idx": {
+          "name": "zuordnungs_merkmal_stufe_wert_idx",
+          "columns": [
+            {
+              "expression": "stufe",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "wert",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "zuordnungs_merkmal_kunde_id_kunde_id_fk": {
+          "name": "zuordnungs_merkmal_kunde_id_kunde_id_fk",
+          "tableFrom": "zuordnungs_merkmal",
+          "tableTo": "kunde",
+          "columnsFrom": [
+            "kunde_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "zuordnungs_merkmal_kunde_stufe_wert_key": {
+          "name": "zuordnungs_merkmal_kunde_stufe_wert_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "kunde_id",
+            "stufe",
+            "wert"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.ausnahmekalender": {
+      "name": "ausnahmekalender",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "beschreibung": {
+          "name": "beschreibung",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "erstellt_am": {
+          "name": "erstellt_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "ausnahmekalender_name_unique": {
+          "name": "ausnahmekalender_name_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "name"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.ausnahmetag": {
+      "name": "ausnahmetag",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "kalender_id": {
+          "name": "kalender_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "datum": {
+          "name": "datum",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bezeichnung": {
+          "name": "bezeichnung",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "ausnahmetag_kalender_id_ausnahmekalender_id_fk": {
+          "name": "ausnahmetag_kalender_id_ausnahmekalender_id_fk",
+          "tableFrom": "ausnahmetag",
+          "tableTo": "ausnahmekalender",
+          "columnsFrom": [
+            "kalender_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "ausnahmetag_kalender_datum_key": {
+          "name": "ausnahmetag_kalender_datum_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "kalender_id",
+            "datum"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.monitor": {
+      "name": "monitor",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "kunde_id": {
+          "name": "kunde_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bezeichnung": {
+          "name": "bezeichnung",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "art": {
+          "name": "art",
+          "type": "monitor_art",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "postfach_id": {
+          "name": "postfach_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "erwartung_modus": {
+          "name": "erwartung_modus",
+          "type": "erwartung_modus",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "erwartung_intervall_sekunden": {
+          "name": "erwartung_intervall_sekunden",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "erwartung_plan": {
+          "name": "erwartung_plan",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "karenz_sekunden": {
+          "name": "karenz_sekunden",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "auto_zurueck_sekunden": {
+          "name": "auto_zurueck_sekunden",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "max_offenzeit_sekunden": {
+          "name": "max_offenzeit_sekunden",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "zaehler_fenster_sekunden": {
+          "name": "zaehler_fenster_sekunden",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "zaehler_obergrenze": {
+          "name": "zaehler_obergrenze",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "zaehler_untergrenze": {
+          "name": "zaehler_untergrenze",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "entwarnungs_stabilitaet_sekunden": {
+          "name": "entwarnungs_stabilitaet_sekunden",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "zustand": {
+          "name": "zustand",
+          "type": "monitor_zustand",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'gesund'"
+        },
+        "alarmgrund": {
+          "name": "alarmgrund",
+          "type": "alarmgrund",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "zustand_seit": {
+          "name": "zustand_seit",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "pausiert": {
+          "name": "pausiert",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "pausiert_bis": {
+          "name": "pausiert_bis",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "aktiviert_am": {
+          "name": "aktiviert_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "zuletzt_gesehen_am": {
+          "name": "zuletzt_gesehen_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "paar_offen_seit": {
+          "name": "paar_offen_seit",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "soll_geprueft_bis_am": {
+          "name": "soll_geprueft_bis_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "erstellt_am": {
+          "name": "erstellt_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "monitor_kunde_idx": {
+          "name": "monitor_kunde_idx",
+          "columns": [
+            {
+              "expression": "kunde_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "monitor_postfach_idx": {
+          "name": "monitor_postfach_idx",
+          "columns": [
+            {
+              "expression": "postfach_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "monitor_kunde_id_kunde_id_fk": {
+          "name": "monitor_kunde_id_kunde_id_fk",
+          "tableFrom": "monitor",
+          "tableTo": "kunde",
+          "columnsFrom": [
+            "kunde_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "monitor_postfach_id_postfach_id_fk": {
+          "name": "monitor_postfach_id_postfach_id_fk",
+          "tableFrom": "monitor",
+          "tableTo": "postfach",
+          "columnsFrom": [
+            "postfach_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "monitor_parameter_je_art": {
+          "name": "monitor_parameter_je_art",
+          "value": "case art\n\t\t\t\twhen 'heartbeat' then\n\t\t\t\t\terwartung_modus is not null and karenz_sekunden is not null\n\t\t\t\t\tand auto_zurueck_sekunden is null and max_offenzeit_sekunden is null\n\t\t\t\t\tand zaehler_fenster_sekunden is null\n\t\t\t\t\tand zaehler_obergrenze is null and zaehler_untergrenze is null\n\t\t\t\t\tand paar_offen_seit is null\n\t\t\t\twhen 'ereignis' then\n\t\t\t\t\tauto_zurueck_sekunden is not null\n\t\t\t\t\tand erwartung_modus is null and karenz_sekunden is null\n\t\t\t\t\tand max_offenzeit_sekunden is null and zaehler_fenster_sekunden is null\n\t\t\t\t\tand zaehler_obergrenze is null and zaehler_untergrenze is null\n\t\t\t\t\tand paar_offen_seit is null\n\t\t\t\twhen 'paar' then\n\t\t\t\t\tmax_offenzeit_sekunden is not null\n\t\t\t\t\tand erwartung_modus is null and karenz_sekunden is null\n\t\t\t\t\tand auto_zurueck_sekunden is null and zaehler_fenster_sekunden is null\n\t\t\t\t\tand zaehler_obergrenze is null and zaehler_untergrenze is null\n\t\t\t\twhen 'zaehler' then\n\t\t\t\t\tzaehler_fenster_sekunden is not null\n\t\t\t\t\tand (zaehler_obergrenze is not null or zaehler_untergrenze is not null)\n\t\t\t\t\tand erwartung_modus is null and karenz_sekunden is null\n\t\t\t\t\tand auto_zurueck_sekunden is null and max_offenzeit_sekunden is null\n\t\t\t\t\tand paar_offen_seit is null\n\t\t\t\telse false\n\t\t\tend"
+        },
+        "monitor_alarmgrund_zum_zustand": {
+          "name": "monitor_alarmgrund_zum_zustand",
+          "value": "(zustand = 'gestoert') = (alarmgrund is not null)"
+        },
+        "monitor_erwartung_vollstaendig": {
+          "name": "monitor_erwartung_vollstaendig",
+          "value": "case\n\t\t\t\twhen erwartung_modus is null then\n\t\t\t\t\terwartung_intervall_sekunden is null and erwartung_plan is null\n\t\t\t\twhen erwartung_modus = 'intervall' then\n\t\t\t\t\terwartung_intervall_sekunden is not null and erwartung_plan is null\n\t\t\t\twhen erwartung_modus = 'kalenderplan' then\n\t\t\t\t\terwartung_plan is not null and erwartung_intervall_sekunden is null\n\t\t\t\telse false\n\t\t\tend"
+        },
+        "monitor_parameter_plausibel": {
+          "name": "monitor_parameter_plausibel",
+          "value": "karenz_sekunden >= 0\n\t\t\t\tand erwartung_intervall_sekunden > 0\n\t\t\t\tand auto_zurueck_sekunden > 0\n\t\t\t\tand max_offenzeit_sekunden >= 0\n\t\t\t\tand zaehler_fenster_sekunden > 0\n\t\t\t\tand zaehler_obergrenze >= 0\n\t\t\t\tand zaehler_untergrenze >= 0\n\t\t\t\tand entwarnungs_stabilitaet_sekunden >= 0\n\t\t\t\tand (\n\t\t\t\t\tzaehler_obergrenze is null or zaehler_untergrenze is null\n\t\t\t\t\tor zaehler_obergrenze >= zaehler_untergrenze\n\t\t\t\t)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.monitor_ausnahmekalender": {
+      "name": "monitor_ausnahmekalender",
+      "schema": "",
+      "columns": {
+        "monitor_id": {
+          "name": "monitor_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kalender_id": {
+          "name": "kalender_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "monitor_ausnahmekalender_monitor_id_monitor_id_fk": {
+          "name": "monitor_ausnahmekalender_monitor_id_monitor_id_fk",
+          "tableFrom": "monitor_ausnahmekalender",
+          "tableTo": "monitor",
+          "columnsFrom": [
+            "monitor_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "monitor_ausnahmekalender_kalender_id_ausnahmekalender_id_fk": {
+          "name": "monitor_ausnahmekalender_kalender_id_ausnahmekalender_id_fk",
+          "tableFrom": "monitor_ausnahmekalender",
+          "tableTo": "ausnahmekalender",
+          "columnsFrom": [
+            "kalender_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "monitor_ausnahmekalender_monitor_id_kalender_id_pk": {
+          "name": "monitor_ausnahmekalender_monitor_id_kalender_id_pk",
+          "columns": [
+            "monitor_id",
+            "kalender_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.regel": {
+      "name": "regel",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "monitor_id": {
+          "name": "monitor_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "absender": {
+          "name": "absender",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
+        },
+        "betreff_muster": {
+          "name": "betreff_muster",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
+        },
+        "schluesselwoerter": {
+          "name": "schluesselwoerter",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
+        },
+        "muster_schlecht": {
+          "name": "muster_schlecht",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
+        },
+        "muster_gut": {
+          "name": "muster_gut",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
+        },
+        "quelle": {
+          "name": "quelle",
+          "type": "regel_quelle",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "vorlage_id": {
+          "name": "vorlage_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "erstellt_am": {
+          "name": "erstellt_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "geaendert_am": {
+          "name": "geaendert_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "regel_monitor_id_monitor_id_fk": {
+          "name": "regel_monitor_id_monitor_id_fk",
+          "tableFrom": "regel",
+          "tableTo": "monitor",
+          "columnsFrom": [
+            "monitor_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "regel_vorlage_id_regel_vorlage_id_fk": {
+          "name": "regel_vorlage_id_regel_vorlage_id_fk",
+          "tableFrom": "regel",
+          "tableTo": "regel_vorlage",
+          "columnsFrom": [
+            "vorlage_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "regel_monitor_id_unique": {
+          "name": "regel_monitor_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "monitor_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.regel_vorlage": {
+      "name": "regel_vorlage",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "schluessel": {
+          "name": "schluessel",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "hersteller": {
+          "name": "hersteller",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "beschreibung": {
+          "name": "beschreibung",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "herkunft": {
+          "name": "herkunft",
+          "type": "vorlagen_herkunft",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "vorgeschlagene_art": {
+          "name": "vorgeschlagene_art",
+          "type": "monitor_art",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "absender": {
+          "name": "absender",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
+        },
+        "betreff_muster": {
+          "name": "betreff_muster",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
+        },
+        "schluesselwoerter": {
+          "name": "schluesselwoerter",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
+        },
+        "muster_schlecht": {
+          "name": "muster_schlecht",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
+        },
+        "muster_gut": {
+          "name": "muster_gut",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
+        },
+        "parameter_defaults": {
+          "name": "parameter_defaults",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "erstellt_am": {
+          "name": "erstellt_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "regel_vorlage_schluessel_unique": {
+          "name": "regel_vorlage_schluessel_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "schluessel"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.mail": {
+      "name": "mail",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "postfach_id": {
+          "name": "postfach_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "graph_message_id": {
+          "name": "graph_message_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ankunftszeit": {
+          "name": "ankunftszeit",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "verarbeitet_am": {
+          "name": "verarbeitet_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "aus_lernfenster": {
+          "name": "aus_lernfenster",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "absender": {
+          "name": "absender",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "empfaenger": {
+          "name": "empfaenger",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
+        },
+        "betreff": {
+          "name": "betreff",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "body_text": {
+          "name": "body_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "kunde_id": {
+          "name": "kunde_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "monitor_id": {
+          "name": "monitor_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "zuordnungs_merkmal_id": {
+          "name": "zuordnungs_merkmal_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sorte_id": {
+          "name": "sorte_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "triage_grund": {
+          "name": "triage_grund",
+          "type": "triage_grund",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "klassifikation": {
+          "name": "klassifikation",
+          "type": "klassifikation",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "mail_postfach_ankunftszeit_idx": {
+          "name": "mail_postfach_ankunftszeit_idx",
+          "columns": [
+            {
+              "expression": "postfach_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "ankunftszeit",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "mail_postfach_graph_message_key": {
+          "name": "mail_postfach_graph_message_key",
+          "columns": [
+            {
+              "expression": "postfach_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "graph_message_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "mail_monitor_ankunftszeit_idx": {
+          "name": "mail_monitor_ankunftszeit_idx",
+          "columns": [
+            {
+              "expression": "monitor_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "ankunftszeit",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "mail_ankunftszeit_idx": {
+          "name": "mail_ankunftszeit_idx",
+          "columns": [
+            {
+              "expression": "ankunftszeit",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "mail_kunde_ankunftszeit_idx": {
+          "name": "mail_kunde_ankunftszeit_idx",
+          "columns": [
+            {
+              "expression": "kunde_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "ankunftszeit",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "mail_sorte_idx": {
+          "name": "mail_sorte_idx",
+          "columns": [
+            {
+              "expression": "sorte_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "mail_zuordnungs_merkmal_idx": {
+          "name": "mail_zuordnungs_merkmal_idx",
+          "columns": [
+            {
+              "expression": "zuordnungs_merkmal_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "mail_triage_grund_idx": {
+          "name": "mail_triage_grund_idx",
+          "columns": [
+            {
+              "expression": "triage_grund",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "triage_grund is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "mail_unverarbeitet_idx": {
+          "name": "mail_unverarbeitet_idx",
+          "columns": [
+            {
+              "expression": "ankunftszeit",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "verarbeitet_am is null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "mail_postfach_id_postfach_id_fk": {
+          "name": "mail_postfach_id_postfach_id_fk",
+          "tableFrom": "mail",
+          "tableTo": "postfach",
+          "columnsFrom": [
+            "postfach_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "mail_kunde_id_kunde_id_fk": {
+          "name": "mail_kunde_id_kunde_id_fk",
+          "tableFrom": "mail",
+          "tableTo": "kunde",
+          "columnsFrom": [
+            "kunde_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "mail_monitor_id_monitor_id_fk": {
+          "name": "mail_monitor_id_monitor_id_fk",
+          "tableFrom": "mail",
+          "tableTo": "monitor",
+          "columnsFrom": [
+            "monitor_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "mail_zuordnungs_merkmal_id_zuordnungs_merkmal_id_fk": {
+          "name": "mail_zuordnungs_merkmal_id_zuordnungs_merkmal_id_fk",
+          "tableFrom": "mail",
+          "tableTo": "zuordnungs_merkmal",
+          "columnsFrom": [
+            "zuordnungs_merkmal_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "mail_sorte_id_mail_sorte_id_fk": {
+          "name": "mail_sorte_id_mail_sorte_id_fk",
+          "tableFrom": "mail",
+          "tableTo": "mail_sorte",
+          "columnsFrom": [
+            "sorte_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.mail_sorte": {
+      "name": "mail_sorte",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "kunde_id": {
+          "name": "kunde_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "signatur": {
+          "name": "signatur",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "absender": {
+          "name": "absender",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "betreff_muster": {
+          "name": "betreff_muster",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "anzahl": {
+          "name": "anzahl",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "erster_eingang": {
+          "name": "erster_eingang",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "letzter_eingang": {
+          "name": "letzter_eingang",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "takt_klasse": {
+          "name": "takt_klasse",
+          "type": "takt_klasse",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "takt_intervall_sekunden": {
+          "name": "takt_intervall_sekunden",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "takt_uhrzeit": {
+          "name": "takt_uhrzeit",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "takt_wochentag": {
+          "name": "takt_wochentag",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "takt_vorkommen": {
+          "name": "takt_vorkommen",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ignoriert": {
+          "name": "ignoriert",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "ignoriert_am": {
+          "name": "ignoriert_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "mail_sorte_kunde_id_kunde_id_fk": {
+          "name": "mail_sorte_kunde_id_kunde_id_fk",
+          "tableFrom": "mail_sorte",
+          "tableTo": "kunde",
+          "columnsFrom": [
+            "kunde_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "mail_sorte_kunde_signatur_key": {
+          "name": "mail_sorte_kunde_signatur_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "kunde_id",
+            "signatur"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "mail_sorte_ignoriert_am_zum_flag": {
+          "name": "mail_sorte_ignoriert_am_zum_flag",
+          "value": "ignoriert = (ignoriert_am is not null)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.ticket_korrelation": {
+      "name": "ticket_korrelation",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "monitor_id": {
+          "name": "monitor_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "selbst_monitor_id": {
+          "name": "selbst_monitor_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "uebergang_id": {
+          "name": "uebergang_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "korrelations_key": {
+          "name": "korrelations_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ticket_id": {
+          "name": "ticket_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ticket_nummer": {
+          "name": "ticket_nummer",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "zustand": {
+          "name": "zustand",
+          "type": "ticket_zustand",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'offen'"
+        },
+        "angelegt_am": {
+          "name": "angelegt_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "letzter_kommentar_am": {
+          "name": "letzter_kommentar_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "geschlossen_am": {
+          "name": "geschlossen_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "ticket_offen_je_monitor_key": {
+          "name": "ticket_offen_je_monitor_key",
+          "columns": [
+            {
+              "expression": "monitor_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "zustand = 'offen'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ticket_offen_je_selbst_monitor_key": {
+          "name": "ticket_offen_je_selbst_monitor_key",
+          "columns": [
+            {
+              "expression": "selbst_monitor_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "zustand = 'offen'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ticket_korrelation_uebergang_idx": {
+          "name": "ticket_korrelation_uebergang_idx",
+          "columns": [
+            {
+              "expression": "uebergang_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "ticket_korrelation_monitor_id_monitor_id_fk": {
+          "name": "ticket_korrelation_monitor_id_monitor_id_fk",
+          "tableFrom": "ticket_korrelation",
+          "tableTo": "monitor",
+          "columnsFrom": [
+            "monitor_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "ticket_korrelation_selbst_monitor_id_selbst_monitor_id_fk": {
+          "name": "ticket_korrelation_selbst_monitor_id_selbst_monitor_id_fk",
+          "tableFrom": "ticket_korrelation",
+          "tableTo": "selbst_monitor",
+          "columnsFrom": [
+            "selbst_monitor_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "ticket_korrelation_uebergang_id_uebergang_id_fk": {
+          "name": "ticket_korrelation_uebergang_id_uebergang_id_fk",
+          "tableFrom": "ticket_korrelation",
+          "tableTo": "uebergang",
+          "columnsFrom": [
+            "uebergang_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "ticket_korrelation_korrelations_key_unique": {
+          "name": "ticket_korrelation_korrelations_key_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "korrelations_key"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "ticket_korrelation_genau_ein_monitor": {
+          "name": "ticket_korrelation_genau_ein_monitor",
+          "value": "(monitor_id is not null) <> (selbst_monitor_id is not null)"
+        },
+        "ticket_korrelation_geschlossen_am_zum_zustand": {
+          "name": "ticket_korrelation_geschlossen_am_zum_zustand",
+          "value": "(zustand = 'geschlossen') = (geschlossen_am is not null)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.uebergang": {
+      "name": "uebergang",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "alert_id": {
+          "name": "alert_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "monitor_id": {
+          "name": "monitor_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "selbst_monitor_id": {
+          "name": "selbst_monitor_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "alarmgrund": {
+          "name": "alarmgrund",
+          "type": "alarmgrund",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "verschaerft_am": {
+          "name": "verschaerft_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "begonnen_am": {
+          "name": "begonnen_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "alarmiert_am": {
+          "name": "alarmiert_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "verschaerfung_gemeldet_am": {
+          "name": "verschaerfung_gemeldet_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "letztes_vorkommen_am": {
+          "name": "letztes_vorkommen_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "vorkommen": {
+          "name": "vorkommen",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "beendet_am": {
+          "name": "beendet_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "entwarnt_am": {
+          "name": "entwarnt_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "entwarnung_entfaellt_am": {
+          "name": "entwarnung_entfaellt_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "erholungs_art": {
+          "name": "erholungs_art",
+          "type": "erholungs_art",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "quittiert_am": {
+          "name": "quittiert_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "vorgaenger_id": {
+          "name": "vorgaenger_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "erstellt_am": {
+          "name": "erstellt_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "uebergang_monitor_begonnen_idx": {
+          "name": "uebergang_monitor_begonnen_idx",
+          "columns": [
+            {
+              "expression": "monitor_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "begonnen_am",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "uebergang_selbst_monitor_begonnen_idx": {
+          "name": "uebergang_selbst_monitor_begonnen_idx",
+          "columns": [
+            {
+              "expression": "selbst_monitor_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "begonnen_am",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "uebergang_vorgaenger_idx": {
+          "name": "uebergang_vorgaenger_idx",
+          "columns": [
+            {
+              "expression": "vorgaenger_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "uebergang_veroeffentlichung_offen_idx": {
+          "name": "uebergang_veroeffentlichung_offen_idx",
+          "columns": [
+            {
+              "expression": "begonnen_am",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "alarmiert_am is null\n\t\t\t\tor (verschaerft_am is not null and verschaerfung_gemeldet_am is null)\n\t\t\t\tor (\n\t\t\t\t\tbeendet_am is not null and entwarnt_am is null\n\t\t\t\t\tand entwarnung_entfaellt_am is null and erholungs_art <> 'archiviert'\n\t\t\t\t)",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "uebergang_offen_je_monitor_key": {
+          "name": "uebergang_offen_je_monitor_key",
+          "columns": [
+            {
+              "expression": "monitor_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "beendet_am is null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "uebergang_offen_je_selbst_monitor_key": {
+          "name": "uebergang_offen_je_selbst_monitor_key",
+          "columns": [
+            {
+              "expression": "selbst_monitor_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "beendet_am is null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "uebergang_monitor_id_monitor_id_fk": {
+          "name": "uebergang_monitor_id_monitor_id_fk",
+          "tableFrom": "uebergang",
+          "tableTo": "monitor",
+          "columnsFrom": [
+            "monitor_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "uebergang_selbst_monitor_id_selbst_monitor_id_fk": {
+          "name": "uebergang_selbst_monitor_id_selbst_monitor_id_fk",
+          "tableFrom": "uebergang",
+          "tableTo": "selbst_monitor",
+          "columnsFrom": [
+            "selbst_monitor_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "uebergang_vorgaenger_fk": {
+          "name": "uebergang_vorgaenger_fk",
+          "tableFrom": "uebergang",
+          "tableTo": "uebergang",
+          "columnsFrom": [
+            "vorgaenger_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "uebergang_alert_id_unique": {
+          "name": "uebergang_alert_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "alert_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "uebergang_genau_ein_monitor": {
+          "name": "uebergang_genau_ein_monitor",
+          "value": "(monitor_id is not null) <> (selbst_monitor_id is not null)"
+        },
+        "uebergang_erholung_vollstaendig": {
+          "name": "uebergang_erholung_vollstaendig",
+          "value": "(beendet_am is null) = (erholungs_art is null)"
+        },
+        "uebergang_entwarnung_nach_erholung": {
+          "name": "uebergang_entwarnung_nach_erholung",
+          "value": "entwarnt_am is null or (beendet_am is not null and entwarnt_am >= beendet_am)"
+        },
+        "uebergang_verschaerfung_gemeldet_nach_verschaerfung": {
+          "name": "uebergang_verschaerfung_gemeldet_nach_verschaerfung",
+          "value": "verschaerfung_gemeldet_am is null or verschaerft_am is not null"
+        },
+        "uebergang_entwarnung_ausgang_eindeutig": {
+          "name": "uebergang_entwarnung_ausgang_eindeutig",
+          "value": "(entwarnt_am is null or entwarnung_entfaellt_am is null)\n\t\t\t\tand (entwarnung_entfaellt_am is null or beendet_am is not null)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.webhook_ziel": {
+      "name": "webhook_ziel",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "bezeichnung": {
+          "name": "bezeichnung",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "url": {
+          "name": "url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "secret_chiffre": {
+          "name": "secret_chiffre",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "http_erlaubt": {
+          "name": "http_erlaubt",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "aktiv": {
+          "name": "aktiv",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "erstellt_am": {
+          "name": "erstellt_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "webhook_ziel_transport": {
+          "name": "webhook_ziel_transport",
+          "value": "\"webhook_ziel\".\"url\" like 'https://%' or (\"webhook_ziel\".\"http_erlaubt\" and \"webhook_ziel\".\"url\" like 'http://%')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.zustellung": {
+      "name": "zustellung",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "uebergang_id": {
+          "name": "uebergang_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ereignis": {
+          "name": "ereignis",
+          "type": "alarm_ereignis",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kanal": {
+          "name": "kanal",
+          "type": "zustell_kanal",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "webhook_ziel_id": {
+          "name": "webhook_ziel_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "job_id": {
+          "name": "job_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "zustand": {
+          "name": "zustand",
+          "type": "zustell_zustand",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'offen'"
+        },
+        "versuche": {
+          "name": "versuche",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "letzter_fehler": {
+          "name": "letzter_fehler",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "erstellt_am": {
+          "name": "erstellt_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "zugestellt_am": {
+          "name": "zugestellt_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "zustellung_uebergang_idx": {
+          "name": "zustellung_uebergang_idx",
+          "columns": [
+            {
+              "expression": "uebergang_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "zustellung_offen_idx": {
+          "name": "zustellung_offen_idx",
+          "columns": [
+            {
+              "expression": "zustand",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "zustand = 'offen'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "zustellung_uebergang_id_uebergang_id_fk": {
+          "name": "zustellung_uebergang_id_uebergang_id_fk",
+          "tableFrom": "zustellung",
+          "tableTo": "uebergang",
+          "columnsFrom": [
+            "uebergang_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "zustellung_webhook_ziel_id_webhook_ziel_id_fk": {
+          "name": "zustellung_webhook_ziel_id_webhook_ziel_id_fk",
+          "tableFrom": "zustellung",
+          "tableTo": "webhook_ziel",
+          "columnsFrom": [
+            "webhook_ziel_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "zustellung_ziel_je_kanal": {
+          "name": "zustellung_ziel_je_kanal",
+          "value": "(kanal = 'webhook' and webhook_ziel_id is not null)\n\t\t\t\tor (kanal = 'autotask' and webhook_ziel_id is null)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.einstellungen": {
+      "name": "einstellungen",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "smallint",
+          "primaryKey": true,
+          "notNull": true,
+          "default": 1
+        },
+        "retention_tage": {
+          "name": "retention_tage",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 90
+        },
+        "zeitzone": {
+          "name": "zeitzone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'Europe/Berlin'"
+        },
+        "entwarnungs_stabilitaet_sekunden": {
+          "name": "entwarnungs_stabilitaet_sekunden",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 900
+        },
+        "heartbeat_ping_url_chiffre": {
+          "name": "heartbeat_ping_url_chiffre",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "heartbeat_ping_intervall_sekunden": {
+          "name": "heartbeat_ping_intervall_sekunden",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 300
+        },
+        "autotask_aktiv": {
+          "name": "autotask_aktiv",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "autotask_zone_url": {
+          "name": "autotask_zone_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "autotask_benutzer": {
+          "name": "autotask_benutzer",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "autotask_secret_chiffre": {
+          "name": "autotask_secret_chiffre",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "autotask_integration_code_chiffre": {
+          "name": "autotask_integration_code_chiffre",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "autotask_ticket_defaults": {
+          "name": "autotask_ticket_defaults",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "geaendert_am": {
+          "name": "geaendert_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "einstellungen_singleton": {
+          "name": "einstellungen_singleton",
+          "value": "id = 1"
+        },
+        "einstellungen_plausibel": {
+          "name": "einstellungen_plausibel",
+          "value": "retention_tage >= 30\n\t\t\t\tand entwarnungs_stabilitaet_sekunden >= 0\n\t\t\t\tand heartbeat_ping_intervall_sekunden > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.heartbeat": {
+      "name": "heartbeat",
+      "schema": "",
+      "columns": {
+        "dienst": {
+          "name": "dienst",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "zuletzt_gesehen": {
+          "name": "zuletzt_gesehen",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "gestartet_am": {
+          "name": "gestartet_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "version": {
+          "name": "version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pid": {
+          "name": "pid",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.selbst_monitor": {
+      "name": "selbst_monitor",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "schluessel": {
+          "name": "schluessel",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "art": {
+          "name": "art",
+          "type": "selbst_monitor_art",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "postfach_id": {
+          "name": "postfach_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "bezeichnung": {
+          "name": "bezeichnung",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "zustand": {
+          "name": "zustand",
+          "type": "monitor_zustand",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'gesund'"
+        },
+        "alarmgrund": {
+          "name": "alarmgrund",
+          "type": "alarmgrund",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "zustand_seit": {
+          "name": "zustand_seit",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "staleness_sekunden": {
+          "name": "staleness_sekunden",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 900
+        },
+        "entwarnungs_stabilitaet_sekunden": {
+          "name": "entwarnungs_stabilitaet_sekunden",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "erstellt_am": {
+          "name": "erstellt_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "selbst_monitor_kern_key": {
+          "name": "selbst_monitor_kern_key",
+          "columns": [
+            {
+              "expression": "art",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "art = 'kern'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "selbst_monitor_postfach_id_postfach_id_fk": {
+          "name": "selbst_monitor_postfach_id_postfach_id_fk",
+          "tableFrom": "selbst_monitor",
+          "tableTo": "postfach",
+          "columnsFrom": [
+            "postfach_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "selbst_monitor_schluessel_unique": {
+          "name": "selbst_monitor_schluessel_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "schluessel"
+          ]
+        },
+        "selbst_monitor_postfach_id_unique": {
+          "name": "selbst_monitor_postfach_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "postfach_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "selbst_monitor_kern_ohne_postfach": {
+          "name": "selbst_monitor_kern_ohne_postfach",
+          "value": "art = 'postfach' or postfach_id is null"
+        },
+        "selbst_monitor_alarmgrund_zum_zustand": {
+          "name": "selbst_monitor_alarmgrund_zum_zustand",
+          "value": "(zustand = 'gestoert') = (alarmgrund is not null)"
+        },
+        "selbst_monitor_parameter_plausibel": {
+          "name": "selbst_monitor_parameter_plausibel",
+          "value": "staleness_sekunden > 0 and entwarnungs_stabilitaet_sekunden >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.alarm_ereignis": {
+      "name": "alarm_ereignis",
+      "schema": "public",
+      "values": [
+        "alarm",
+        "entwarnung",
+        "verschaerfung"
+      ]
+    },
+    "public.alarmgrund": {
+      "name": "alarmgrund",
+      "schema": "public",
+      "values": [
+        "ueberfaellig",
+        "fehler_gemeldet",
+        "unklar",
+        "ereignis_eingetroffen",
+        "paar_zu_lange_offen",
+        "zaehler_ueber_obergrenze",
+        "zaehler_unter_untergrenze"
+      ]
+    },
+    "public.erholungs_art": {
+      "name": "erholungs_art",
+      "schema": "public",
+      "values": [
+        "beweis",
+        "erledigt",
+        "auto_zurueck",
+        "archiviert"
+      ]
+    },
+    "public.erwartung_modus": {
+      "name": "erwartung_modus",
+      "schema": "public",
+      "values": [
+        "intervall",
+        "kalenderplan"
+      ]
+    },
+    "public.klassifikation": {
+      "name": "klassifikation",
+      "schema": "public",
+      "values": [
+        "ok",
+        "fehler",
+        "unklar"
+      ]
+    },
+    "public.kunde_zustand": {
+      "name": "kunde_zustand",
+      "schema": "public",
+      "values": [
+        "aktiv",
+        "archiviert"
+      ]
+    },
+    "public.monitor_art": {
+      "name": "monitor_art",
+      "schema": "public",
+      "values": [
+        "heartbeat",
+        "ereignis",
+        "paar",
+        "zaehler"
+      ]
+    },
+    "public.monitor_zustand": {
+      "name": "monitor_zustand",
+      "schema": "public",
+      "values": [
+        "gesund",
+        "gestoert"
+      ]
+    },
+    "public.regel_quelle": {
+      "name": "regel_quelle",
+      "schema": "public",
+      "values": [
+        "manuell",
+        "vorlage",
+        "abgeleitet"
+      ]
+    },
+    "public.selbst_monitor_art": {
+      "name": "selbst_monitor_art",
+      "schema": "public",
+      "values": [
+        "kern",
+        "postfach"
+      ]
+    },
+    "public.takt_klasse": {
+      "name": "takt_klasse",
+      "schema": "public",
+      "values": [
+        "intervall",
+        "taeglich",
+        "werktaeglich",
+        "woechentlich"
+      ]
+    },
+    "public.ticket_zustand": {
+      "name": "ticket_zustand",
+      "schema": "public",
+      "values": [
+        "offen",
+        "geschlossen"
+      ]
+    },
+    "public.triage_grund": {
+      "name": "triage_grund",
+      "schema": "public",
+      "values": [
+        "kein_kunde",
+        "mehrdeutig",
+        "kein_monitor"
+      ]
+    },
+    "public.vorlagen_herkunft": {
+      "name": "vorlagen_herkunft",
+      "schema": "public",
+      "values": [
+        "kuratiert",
+        "eigen"
+      ]
+    },
+    "public.zuordnungs_stufe": {
+      "name": "zuordnungs_stufe",
+      "schema": "public",
+      "values": [
+        "plus_adresse",
+        "inhaltsmuster",
+        "absender"
+      ]
+    },
+    "public.zustell_kanal": {
+      "name": "zustell_kanal",
+      "schema": "public",
+      "values": [
+        "autotask",
+        "webhook"
+      ]
+    },
+    "public.zustell_zustand": {
+      "name": "zustell_zustand",
+      "schema": "public",
+      "values": [
+        "offen",
+        "zugestellt",
+        "fehlgeschlagen"
+      ]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

@@ -1,0 +1,124 @@
+# Nightwatch — the single source of truth for deployment (SPEC §14).
+#
+# Self-healing is `restart: unless-stopped` plus the in-process watchdog timer, which exits on a
+# hung main loop. The healthchecks below gate startup order and make `docker compose ps` honest;
+# Docker does NOT restart a container just for being unhealthy.
+#
+# No Docker socket is mounted anywhere, and all three app services run as a non-root user.
+
+name: nightwatch
+
+x-app-env: &app-env
+  # Derived from the POSTGRES_* values, so changing the password in .env is enough. Set
+  # DATABASE_URL in .env only to point the stack at your own Postgres instead.
+  DATABASE_URL: '${DATABASE_URL:-postgres://${POSTGRES_USER:-nightwatch}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-nightwatch}}'
+  HEARTBEAT_INTERVAL_SECONDS: ${HEARTBEAT_INTERVAL_SECONDS:-15}
+  WATCHDOG_TIMEOUT_SECONDS: ${WATCHDOG_TIMEOUT_SECONDS:-90}
+  INGESTION_TICK_SECONDS: ${INGESTION_TICK_SECONDS:-15}
+  ZUORDNUNG_TICK_SECONDS: ${ZUORDNUNG_TICK_SECONDS:-10}
+  ZEIT_TICK_SECONDS: ${ZEIT_TICK_SECONDS:-30}
+  ALARM_TICK_SECONDS: ${ALARM_TICK_SECONDS:-10}
+  SELBST_TICK_SECONDS: ${SELBST_TICK_SECONDS:-30}
+  # The watchdog's encrypted config and dedup cache (SPEC §8). Only the watchdog mounts the volume;
+  # the variable is shared so every role agrees on the path.
+  WATCHDOG_CACHE_FILE: ${WATCHDOG_CACHE_FILE:-/var/lib/nightwatch/watchdog-cache.enc}
+  # Shared, not web-only: the worker builds the Rückverweis deep link every alarm carries, so it
+  # needs the same public origin the dashboard is served under.
+  ORIGIN: ${ORIGIN:-http://localhost:3000}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  # Encrypts stored credentials (SPEC §12). Deliberately not `:?` — the stack has to come up
+  # without it so an operator can reach the settings page; it is required at the moment a mailbox
+  # is connected, and the UI says so.
+  NIGHTWATCH_SECRET_KEY: ${NIGHTWATCH_SECRET_KEY:-}
+
+x-app: &app
+  image: ghcr.io/erwins-enkel/nightwatch:${NIGHTWATCH_VERSION:-latest}
+  restart: unless-stopped
+  environment: *app-env
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-nightwatch}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-nightwatch}
+    ports:
+      # Loopback only, so host-side development can reach it. Remove in production — nothing
+      # outside the Compose network needs the database.
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-nightwatch} -d ${POSTGRES_DB:-nightwatch}']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  web:
+    <<: *app
+    # The only service with a build context: all three roles share this one image, so Compose
+    # builds it once and worker/watchdog reuse the tag.
+    build:
+      context: .
+      args:
+        # The app version stamped into /health, distinct from the image tag above. The release
+        # workflow passes a real SemVer; a local build is simply "dev".
+        APP_VERSION: ${APP_VERSION:-dev}
+    command: ['web']
+    environment:
+      <<: *app-env
+      PORT: 3000
+    ports:
+      - '${WEB_PORT:-3000}:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO /dev/null http://127.0.0.1:3000/health']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      # Generous: the web role applies migrations before it starts listening.
+      start_period: 60s
+
+  worker:
+    <<: *app
+    command: ['worker']
+    depends_on:
+      # Waits for web because web is the migrator — there is no schema before it is healthy.
+      web:
+        condition: service_healthy
+    stop_grace_period: 20s
+    healthcheck: &liveness
+      # The in-process watchdog bumps this file's mtime on every main-loop tick. A wedged event
+      # loop cannot fire its own timer, but it stops touching the file — that is what this sees.
+      test:
+        [
+          'CMD-SHELL',
+          'test $$(( $$(date +%s) - $$(stat -c %Y /tmp/nightwatch-alive) )) -lt ${WATCHDOG_TIMEOUT_SECONDS:-90}'
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  watchdog:
+    <<: *app
+    command: ['watchdog']
+    depends_on:
+      web:
+        condition: service_healthy
+    volumes:
+      # The one piece of state that must survive Postgres being gone (SPEC §8): the encrypted
+      # config and dedup cache. Without it a database outage could not be alarmed about at all,
+      # and a restart would re-announce an outage it had already reported.
+      - watchdog-data:/var/lib/nightwatch
+    healthcheck: *liveness
+
+volumes:
+  postgres-data:
+  watchdog-data:

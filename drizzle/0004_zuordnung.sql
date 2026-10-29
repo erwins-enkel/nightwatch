@@ -1,0 +1,1 @@
+CREATE INDEX "mail_unverarbeitet_idx" ON "mail" USING btree ("ankunftszeit") WHERE verarbeitet_am is null;
